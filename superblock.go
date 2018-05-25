@@ -354,10 +354,10 @@ func (inode *Inode) ReadDirectory(sb *Superblock, dev *os.File) []DirectoryEntry
 	}
 }
 
-func main() {
+func ReadFile(filename string) {
 	log.SetFlags(log.Lshortfile | log.LstdFlags)
 
-	f, err := os.Open(os.Args[1])
+	f, err := os.Open(filename)
 	if err != nil {
 		log.Fatalf(err.Error())
 	}
