@@ -6,6 +6,8 @@ import (
 	"github.com/lunixbochs/struc"
 	"fmt"
 	"io"
+	"bytes"
+	"encoding/binary"
 )
 
 type GroupDescriptor struct {
@@ -47,7 +49,7 @@ type Inode struct {
 	Blocks_lo    int32     `struc:"int32,little"`
 	Flags        int32     `struc:"int32,little"`
 	Osd1         int32     `struc:"int32,little"`
-	Block        [15]int32 `struc:"[15]int32,little"`
+	BlockOrExtents []byte `struc:"[60]byte,little"`
 	Generation   int32     `struc:"int32,little"`
 	File_acl_lo  int32     `struc:"int32,little"`
 	Size_high    int32     `struc:"int32,little"`
@@ -72,6 +74,29 @@ type MoveExtent struct {
 	Len         uint64 `struc:"uint64,little"`
 	Moved_len   uint64 `struc:"uint64,little"`
 };
+
+type ExtentHeader struct {
+	Magic      int16 `struc:"int16,little"`
+	Entries    int16 `struc:"int16,little"`
+	Max        int16 `struc:"int16,little"`
+	Depth      int16 `struc:"int16,little"`
+	Generation int32 `struc:"int32,little"`
+}
+
+type Extent struct {
+	Block    int32 `struc:"int32,little"`
+	Len      int16 `struc:"int16,little"`
+	Start_hi int16 `struc:"int16,little"`
+	Start_lo int32 `struc:"int32,little"`
+}
+
+type DirectoryEntry2 struct {
+	Inode int32 `struc:"int32,little"`
+	Rec_len int16 `struc:"int16,little"`
+	Name_len int8 `struc:"int8,sizeof=Name"`
+	Flags int8 `struc:"int8"`
+	Name string `struc:"[]byte"`
+}
 
 type Superblock struct {
 	InodeCount         int32 `struc:"int32,little"`
@@ -218,7 +243,120 @@ func (sb *Superblock) GetBlockCount() int64 {
 	}
 }
 
+func (sb *Superblock) GetBlockSize() int64 {
+	return int64(1024 << uint(sb.Log_block_size))
+}
+
+func getBlockGroupDescriptor(blockGroupNum int64,  sb *Superblock, dev *os.File) *GroupDescriptor {
+	blockSize := sb.GetBlockSize()
+	bgdtLocation := 1024/blockSize + 1
+
+	bgd := &GroupDescriptor{}
+	dev.Seek((bgdtLocation+blockGroupNum)*blockSize, 0)
+	if sb.FeatureIncompat64bit() {
+		struc.Unpack(dev, &bgd)
+	} else {
+		struc.Unpack(io.LimitReader(dev, 32), &bgd)
+	}
+	//fmt.Printf("Read block group %d, contents:\n%+v\n", blockGroupNum, bgd)
+	return bgd
+}
+
+func (bgd *GroupDescriptor) GetInodeTableLoc(sb *Superblock) int64 {
+	if sb.FeatureIncompat64bit() {
+		return (int64(bgd.Inode_table_hi) << 32) | int64(bgd.Inode_table_lo)
+	} else {
+		return int64(bgd.Inode_table_lo)
+	}
+}
+
+func getInode(inodeAddress int64, sb *Superblock, dev *os.File) *Inode {
+	bgd := getBlockGroupDescriptor((inodeAddress - 1) / int64(sb.InodePer_group), sb, dev)
+	index := (inodeAddress - 1) % int64(sb.InodePer_group)
+	pos := bgd.GetInodeTableLoc(sb) * sb.GetBlockSize() + index * int64(sb.Inode_size)
+	//log.Printf("%d %d %d %d", bgd.GetInodeTableLoc(sb), sb.GetBlockSize(), index, sb.Inode_size)
+	dev.Seek(pos, 0)
+
+	inode := &Inode{}
+	struc.Unpack(dev, &inode)
+	//log.Printf("Read inode at offset %d, contents:\n%+v\n", pos, inode)
+	return inode
+}
+
+func (inode *Inode) UsesExtents() bool {
+	return (inode.Flags & EXTENTS_FL) != 0
+}
+
+func (inode *Inode) UsesDirectoryHashTree() bool {
+	return (inode.Flags & INDEX_FL) != 0
+}
+
+func (inode *Inode) ReadFile(sb *Superblock, dev *os.File) {
+	size := int64(inode.Size_lo)
+	for blockTableIndex := int64(0); blockTableIndex < (int64(inode.Size_lo)+sb.GetBlockSize()-1)/sb.GetBlockSize(); blockTableIndex++ {
+		blockNum := binary.LittleEndian.Uint32(inode.BlockOrExtents[blockTableIndex * 4:])
+		dev.Seek(int64(blockNum) * sb.GetBlockSize(), 0)
+		sizeInBlock := sb.GetBlockSize()
+		if size < sizeInBlock {
+			sizeInBlock = size
+		}
+		data := make([]byte, sizeInBlock)
+		dev.Read(data)
+		log.Printf("%s", string(data))
+		size -= sizeInBlock
+	}
+
+	if size > 0 {
+		log.Fatalf("Oversize block")
+	}
+}
+
+func (inode *Inode) ReadDirectory(sb *Superblock, dev *os.File) []DirectoryEntry2 {
+	if inode.UsesDirectoryHashTree() {
+		log.Fatalf("Not implemented")
+	}
+	if inode.UsesExtents() {
+		extentHeader := &ExtentHeader{}
+		struc.Unpack(bytes.NewReader([]byte(inode.BlockOrExtents)), &extentHeader)
+		log.Printf("extent header: %+v", extentHeader)
+		if extentHeader.Depth == 0 { // Leaf
+			for i := int16(0); i < extentHeader.Entries; i++ {
+				extent := &Extent{}
+				struc.Unpack(bytes.NewReader([]byte(inode.BlockOrExtents)[12 + i * 12:]), &extent)
+				log.Printf("extent: %+v", extent)
+			}
+		} else {
+			log.Fatalf("Not implemented")
+		}
+		return nil
+	} else {
+		ret := []DirectoryEntry2{}
+		for blockTableIndex := int64(0); blockTableIndex < (int64(inode.Size_lo) + sb.GetBlockSize() - 1) / sb.GetBlockSize(); blockTableIndex++ {
+			blockNum := binary.LittleEndian.Uint32(inode.BlockOrExtents[blockTableIndex * 4:])
+			blockStart := int64(blockNum) * sb.GetBlockSize()
+			pos := blockStart
+			for i := 0; i < 16; i++ {
+				dev.Seek(pos, 0)
+				dirEntry := DirectoryEntry2{}
+				struc.Unpack(dev, &dirEntry)
+				log.Printf("dirEntry %s: %+v", string(dirEntry.Name), dirEntry)
+				pos += int64(dirEntry.Rec_len)
+				ret = append(ret, dirEntry)
+				if pos == blockStart+sb.GetBlockSize() {
+					log.Printf("Reached end of block, next block")
+					break
+				} else if pos > blockStart + sb.GetBlockSize() {
+					log.Fatalf("Unexpected overflow out of block when directory listing")
+				}
+			}
+		}
+		return ret
+	}
+}
+
 func main() {
+	log.SetFlags(log.Lshortfile | log.LstdFlags)
+
 	f, err := os.Open(os.Args[1])
 	if err != nil {
 		log.Fatalf(err.Error())
@@ -233,26 +371,19 @@ func main() {
 
 	fmt.Printf("Super:\n%+v\n", sb)
 
-	log.Printf("Fincompat: %x\n", sb.Feature_incompat)
-
 	numBlockGroups := (sb.GetBlockCount() + int64(sb.BlockPer_group) - 1) / int64(sb.BlockPer_group)
 	numBlockGroups2 := (sb.InodeCount + sb.InodePer_group - 1) / sb.InodePer_group
 	if numBlockGroups != int64(numBlockGroups2) {
 		log.Fatalf("Block/inode mismatch: %d %d %d", sb.GetBlockCount(), numBlockGroups, numBlockGroups2)
 	}
 
-	blockSize := int64(1024 << uint(sb.Log_block_size))
-	bgdtLocation := 1024/blockSize + 1
-
-	bgd := &GroupDescriptor{}
-	f.Seek(bgdtLocation*blockSize, 0)
-	for i := int64(0); i < numBlockGroups; i++ {
-		log.Println(f.Seek(0, 1))
-		if sb.FeatureIncompat64bit() {
-			struc.Unpack(f, &bgd)
-		} else {
-			struc.Unpack(io.LimitReader(f, 32), &bgd)
+	inode := getInode(ROOT_INO, sb, f)
+	dirContents := inode.ReadDirectory(sb, f)
+	for i := 0; i < len(dirContents); i++ {
+		log.Println(string(dirContents[i].Name), dirContents[i].Flags)
+		if dirContents[i].Flags == 1 {
+			inode := getInode(int64(dirContents[i].Inode), sb, f)
+			inode.ReadFile(sb, f)
 		}
-		fmt.Printf("Bgd:\n%+v\n", bgd)
 	}
 }
