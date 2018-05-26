@@ -38,7 +38,7 @@ func NewTestFs(t *testing.T, sizeMb int) *TestFs {
 	err = exec.Command("sudo", "mount", f.Name(), td).Run()
 	require.Nil(t, err)
 
-	err = exec.Command("sudo", "chmod", "777", td).Run()
+	err = exec.Command("sudo", "chmod", "-R", "777", td).Run()
 	require.Nil(t, err)
 
 	return &TestFs{f.Name(), td, t}
@@ -61,9 +61,9 @@ func (tfs *TestFs) Close() {
 }
 
 func (tfs *TestFs) WriteSmallFile(path string, file string, b []byte) {
-	err := os.MkdirAll(tfs.mntPath + path, 777)
+	err := os.MkdirAll(tfs.mntPath + path, 0777)
 	require.Nil(tfs.t, err)
-	err = ioutil.WriteFile(tfs.mntPath + path + "/" + file, b, 777)
+	err = ioutil.WriteFile(tfs.mntPath + path + "/" + file, b, 0777)
 	require.Nil(tfs.t, err)
 }
 
@@ -83,13 +83,12 @@ func (tfs *TestFs) WriteLargeFile(path string, file string, size int) *os.File {
 	}
 	err := largefile.Close()
 	require.Nil(tfs.t, err)
-	err = os.MkdirAll(tfs.mntPath + path, 777)
+	err = os.MkdirAll(tfs.mntPath + path, 0777)
 	require.Nil(tfs.t, err)
 	err = exec.Command("cp", largefile.Name(), tfs.mntPath + path + file).Run()
 	require.Nil(tfs.t, err)
 	return largefile
 }
-
 
 func TestIntegrationRead(t *testing.T) {
 	tfs := NewTestFs(t, 1100)
@@ -97,7 +96,7 @@ func TestIntegrationRead(t *testing.T) {
 
 	text := []byte("hello world")
 	tfs.WriteSmallFile("/", "smallfile", text)
-	//tfs.WriteSmallFile("/dir1/dir2", "smallfile", text)
+	tfs.WriteSmallFile("/dir1", "smallfile", text)
 	largefile := tfs.WriteLargeFile("/", "largefile", 987654321)
 	defer os.Remove(largefile.Name())
 	tfs.Unmount()
@@ -113,13 +112,13 @@ func TestIntegrationRead(t *testing.T) {
 		require.Equal(t, text, out)
 	}
 
-	//{
-	//	file, err := fs.Open("/dir1/dir2/smallfile")
-	//	require.Nil(t, err)
-	//	out, err := ioutil.ReadAll(file)
-	//	require.Nil(t, err)
-	//	require.Equal(t, text, out)
-	//}
+	{
+		file, err := fs.Open("/dir1/smallfile")
+		require.Nil(t, err)
+		out, err := ioutil.ReadAll(file)
+		require.Nil(t, err)
+		require.Equal(t, text, out)
+	}
 
 	{
 		file, err := fs.Open("/largefile")

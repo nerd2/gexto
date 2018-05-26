@@ -8,34 +8,34 @@ import (
 )
 
 type Inode struct {
-	Mode         int16     `struc:"int16,little"`
-	Uid          int16     `struc:"int16,little"`
-	Size_lo      int32     `struc:"int32,little"`
-	Atime        int32     `struc:"int32,little"`
-	Ctime        int32     `struc:"int32,little"`
-	Mtime        int32     `struc:"int32,little"`
-	Dtime        int32     `struc:"int32,little"`
-	Gid          int16     `struc:"int16,little"`
-	Links_count  int16     `struc:"int16,little"`
-	Blocks_lo    int32     `struc:"int32,little"`
-	Flags        int32     `struc:"int32,little"`
-	Osd1         int32     `struc:"int32,little"`
-	BlockOrExtents []byte `struc:"[60]byte,little"`
-	Generation   int32     `struc:"int32,little"`
-	File_acl_lo  int32     `struc:"int32,little"`
-	Size_high    int32     `struc:"int32,little"`
-	Obso_faddr   int32     `struc:"int32,little"`
-	Osd2         [12]byte  `struc:"[12]byte"`
-	Extra_isize  int16     `struc:"int16,little"`
-	Checksum_hi  int16     `struc:"int16,little"`
-	Ctime_extra  int32     `struc:"int32,little"`
-	Mtime_extra  int32     `struc:"int32,little"`
-	Atime_extra  int32     `struc:"int32,little"`
-	Crtime       int32     `struc:"int32,little"`
-	Crtime_extra int32     `struc:"int32,little"`
-	Version_hi   int32     `struc:"int32,little"`
-	Projid       int32     `struc:"int32,little"`
-	fs           *fs
+	Mode           uint16   `struc:"uint16,little"`
+	Uid            uint16   `struc:"uint16,little"`
+	Size_lo        uint32   `struc:"uint32,little"`
+	Atime          uint32   `struc:"uint32,little"`
+	Ctime          uint32   `struc:"uint32,little"`
+	Mtime          uint32   `struc:"uint32,little"`
+	Dtime          uint32   `struc:"uint32,little"`
+	Gid            uint16   `struc:"uint16,little"`
+	Links_count    uint16   `struc:"uint16,little"`
+	Blocks_lo      uint32   `struc:"uint32,little"`
+	Flags          uint32   `struc:"uint32,little"`
+	Osd1           uint32   `struc:"uint32,little"`
+	BlockOrExtents []byte   `struc:"[60]byte,little"`
+	Generation     uint32   `struc:"uint32,little"`
+	File_acl_lo    uint32   `struc:"uint32,little"`
+	Size_high      uint32   `struc:"uint32,little"`
+	Obso_faddr     uint32   `struc:"uint32,little"`
+	Osd2           [12]byte `struc:"[12]byte"`
+	Extra_isize    uint16   `struc:"uint16,little"`
+	Checksum_hi    uint16   `struc:"uint16,little"`
+	Ctime_extra    uint32   `struc:"uint32,little"`
+	Mtime_extra    uint32   `struc:"uint32,little"`
+	Atime_extra    uint32   `struc:"uint32,little"`
+	Crtime         uint32   `struc:"uint32,little"`
+	Crtime_extra   uint32   `struc:"uint32,little"`
+	Version_hi     uint32   `struc:"uint32,little"`
+	Projid         uint32   `struc:"uint32,little"`
+	fs             *fs
 };
 
 
@@ -81,11 +81,11 @@ func (inode *Inode) ReadDirectory() []DirectoryEntry2 {
 				dev.Seek(pos, 0)
 				dirEntry := DirectoryEntry2{}
 				struc.Unpack(dev, &dirEntry)
-				log.Printf("dirEntry %s: %+v", string(dirEntry.Name), dirEntry)
+				//log.Printf("dirEntry %s: %+v", string(dirEntry.Name), dirEntry)
 				pos += int64(dirEntry.Rec_len)
 				ret = append(ret, dirEntry)
 				if pos == blockStart+sb.GetBlockSize() {
-					log.Printf("Reached end of block, next block")
+					//log.Printf("Reached end of block, next block")
 					break
 				} else if pos > blockStart + sb.GetBlockSize() {
 					log.Fatalf("Unexpected overflow out of block when directory listing")

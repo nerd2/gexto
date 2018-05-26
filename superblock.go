@@ -1,13 +1,5 @@
 package gexto
 
-import (
-	"os"
-	"github.com/lunixbochs/struc"
-	"io"
-	"log"
-)
-
-
 type MoveExtent struct {
 	Reserved    int32  `struc:"int32,little"`
 	Donor_fd    int32  `struc:"int32,little"`
@@ -33,111 +25,111 @@ type Extent struct {
 }
 
 type DirectoryEntry2 struct {
-	Inode int32 `struc:"int32,little"`
-	Rec_len int16 `struc:"int16,little"`
-	Name_len int8 `struc:"int8,sizeof=Name"`
-	Flags int8 `struc:"int8"`
+	Inode uint32 `struc:"uint32,little"`
+	Rec_len uint16 `struc:"uint16,little"`
+	Name_len uint8 `struc:"uint8,sizeof=Name"`
+	Flags uint8 `struc:"uint8"`
 	Name string `struc:"[]byte"`
 }
 
 type Superblock struct {
-	InodeCount         int32 `struc:"int32,little"`
-	BlockCount_lo      int32 `struc:"int32,little"`
-	R_blockCount_lo    int32 `struc:"int32,little"`
-	Free_blockCount_lo int32 `struc:"int32,little"`
-	Free_inodeCount    int32 `struc:"int32,little"`
-	First_data_block   int32 `struc:"int32,little"`
-	Log_block_size     int32 `struc:"int32,little"`
-	Log_cluster_size   int32 `struc:"int32,little"`
-	BlockPer_group     int32 `struc:"int32,little"`
-	ClusterPer_group   int32 `struc:"int32,little"`
-	InodePer_group     int32 `struc:"int32,little"`
-	Mtime              int32 `struc:"int32,little"`
-	Wtime              int32 `struc:"int32,little"`
-	Mnt_count          int16 `struc:"int16,little"`
-	Max_mnt_count      int16 `struc:"int16,little"`
-	Magic              int16 `struc:"int16,little"`
-	State              int16 `struc:"int16,little"`
-	Errors             int16 `struc:"int16,little"`
-	Minor_rev_level    int16 `struc:"int16,little"`
-	Lastcheck          int32 `struc:"int32,little"`
-	Checkinterval      int32 `struc:"int32,little"`
-	Creator_os         int32 `struc:"int32,little"`
-	Rev_level          int32 `struc:"int32,little"`
-	Def_resuid         int16 `struc:"int16,little"`
-	Def_resgid         int16 `struc:"int16,little"`
+	InodeCount         uint32 `struc:"uint32,little"`
+	BlockCount_lo      uint32 `struc:"uint32,little"`
+	R_blockCount_lo    uint32 `struc:"uint32,little"`
+	Free_blockCount_lo uint32 `struc:"uint32,little"`
+	Free_inodeCount    uint32 `struc:"uint32,little"`
+	First_data_block   uint32 `struc:"uint32,little"`
+	Log_block_size     uint32 `struc:"uint32,little"`
+	Log_cluster_size   uint32 `struc:"uint32,little"`
+	BlockPer_group     uint32 `struc:"uint32,little"`
+	ClusterPer_group   uint32 `struc:"uint32,little"`
+	InodePer_group     uint32 `struc:"uint32,little"`
+	Mtime              uint32 `struc:"uint32,little"`
+	Wtime              uint32 `struc:"uint32,little"`
+	Mnt_count          uint16 `struc:"uint16,little"`
+	Max_mnt_count      uint16 `struc:"uint16,little"`
+	Magic              uint16 `struc:"uint16,little"`
+	State              uint16 `struc:"uint16,little"`
+	Errors             uint16 `struc:"uint16,little"`
+	Minor_rev_level    uint16 `struc:"uint16,little"`
+	Lastcheck          uint32 `struc:"uint32,little"`
+	Checkinterval      uint32 `struc:"uint32,little"`
+	Creator_os         uint32 `struc:"uint32,little"`
+	Rev_level          uint32 `struc:"uint32,little"`
+	Def_resuid         uint16 `struc:"uint16,little"`
+	Def_resgid         uint16 `struc:"uint16,little"`
 	// Dynamic_rev superblocks only
-	First_ino              int32    `struc:"int32,little"`
-	Inode_size             int16    `struc:"int16,little"`
-	Block_group_nr         int16    `struc:"int16,little"`
-	Feature_compat         int32    `struc:"int32,little"`
-	Feature_incompat       int32    `struc:"int32,little"`
-	Feature_ro_compat      int32    `struc:"int32,little"`
+	First_ino              uint32    `struc:"uint32,little"`
+	Inode_size             uint16    `struc:"uint16,little"`
+	Block_group_nr         uint16    `struc:"uint16,little"`
+	Feature_compat         uint32    `struc:"uint32,little"`
+	Feature_incompat       uint32    `struc:"uint32,little"`
+	Feature_ro_compat      uint32    `struc:"uint32,little"`
 	Uuid                   [16]byte `struc:"byte"`
 	Volume_name            [16]byte `struc:"byte"`
 	Last_mounted           [64]byte `struc:"byte"`
-	Algorithm_usage_bitmap int32    `struc:"int32,little"`
+	Algorithm_usage_bitmap uint32    `struc:"uint32,little"`
 	// Performance hints
 	Prealloc_blocks     byte  `struc:"byte"`
 	Prealloc_dir_blocks byte  `struc:"byte"`
-	Reserved_gdt_blocks int16 `struc:"int16,little"`
+	Reserved_gdt_blocks uint16 `struc:"uint16,little"`
 	// Journal
 
 	Journal_Uuid       [16]byte  `struc:"byte"`
-	Journal_inum       int32     `struc:"int32,little"`
-	Journal_dev        int32     `struc:"int32,little"`
-	Last_orphan        int32     `struc:"int32,little"`
-	Hash_seed          [4]int32  `struc:"[4]int32,little"`
+	Journal_inum       uint32     `struc:"uint32,little"`
+	Journal_dev        uint32     `struc:"uint32,little"`
+	Last_orphan        uint32     `struc:"uint32,little"`
+	Hash_seed          [4]uint32  `struc:"[4]uint32,little"`
 	Def_hash_version   byte      `struc:"byte"`
 	Jnl_backup_type    byte      `struc:"byte"`
-	Desc_size          int16     `struc:"int16,little"`
-	Default_mount_opts int32     `struc:"int32,little"`
-	First_meta_bg      int32     `struc:"int32,little"`
-	MkfTime            int32     `struc:"int32,little"`
-	Jnl_blocks         [17]int32 `struc:"[17]int32,little"`
+	Desc_size          uint16     `struc:"uint16,little"`
+	Default_mount_opts uint32     `struc:"uint32,little"`
+	First_meta_bg      uint32     `struc:"uint32,little"`
+	MkfTime            uint32     `struc:"uint32,little"`
+	Jnl_blocks         [17]uint32 `struc:"[17]uint32,little"`
 
-	BlockCount_hi         int32     `struc:"int32,little"`
-	R_blockCount_hi       int32     `struc:"int32,little"`
-	Free_blockCount_hi    int32     `struc:"int32,little"`
-	Min_extra_isize       int16     `struc:"int16,little"`
-	Want_extra_isize      int16     `struc:"int16,little"`
-	Flags                 int32     `struc:"int32,little"`
-	Raid_stride           int16     `struc:"int16,little"`
-	Mmp_update_interval   int16     `struc:"int16,little"`
-	Mmp_block             int64     `struc:"int64,little"`
-	Raid_stripe_width     int32     `struc:"int32,little"`
+	BlockCount_hi         uint32     `struc:"uint32,little"`
+	R_blockCount_hi       uint32     `struc:"uint32,little"`
+	Free_blockCount_hi    uint32     `struc:"uint32,little"`
+	Min_extra_isize       uint16     `struc:"uint16,little"`
+	Want_extra_isize      uint16     `struc:"uint16,little"`
+	Flags                 uint32     `struc:"uint32,little"`
+	Raid_stride           uint16     `struc:"uint16,little"`
+	Mmp_update_interval   uint16     `struc:"uint16,little"`
+	Mmp_block             uint64     `struc:"uint64,little"`
+	Raid_stripe_width     uint32     `struc:"uint32,little"`
 	Log_groupPer_flex     byte      `struc:"byte"`
 	Checksum_type         byte      `struc:"byte"`
 	Encryption_level      byte      `struc:"byte"`
 	Reserved_pad          byte      `struc:"byte"`
-	KbyteWritten          int64     `struc:"int64,little"`
-	Snapshot_inum         int32     `struc:"int32,little"`
-	Snapshot_id           int32     `struc:"int32,little"`
-	Snapshot_r_blockCount int64     `struc:"int64,little"`
-	Snapshot_list         int32     `struc:"int32,little"`
-	Error_count           int32     `struc:"int32,little"`
-	First_error_time      int32     `struc:"int32,little"`
-	First_error_ino       int32     `struc:"int32,little"`
-	First_error_block     int64     `struc:"int64,little"`
+	KbyteWritten          uint64     `struc:"uint64,little"`
+	Snapshot_inum         uint32     `struc:"uint32,little"`
+	Snapshot_id           uint32     `struc:"uint32,little"`
+	Snapshot_r_blockCount uint64     `struc:"uint64,little"`
+	Snapshot_list         uint32     `struc:"uint32,little"`
+	Error_count           uint32     `struc:"uint32,little"`
+	First_error_time      uint32     `struc:"uint32,little"`
+	First_error_ino       uint32     `struc:"uint32,little"`
+	First_error_block     uint64     `struc:"uint64,little"`
 	First_error_func      [32]byte  `struc:"pad"`
-	First_error_line      int32     `struc:"int32,little"`
-	Last_error_time       int32     `struc:"int32,little"`
-	Last_error_ino        int32     `struc:"int32,little"`
-	Last_error_line       int32     `struc:"int32,little"`
-	Last_error_block      int64     `struc:"int64,little"`
+	First_error_line      uint32     `struc:"uint32,little"`
+	Last_error_time       uint32     `struc:"uint32,little"`
+	Last_error_ino        uint32     `struc:"uint32,little"`
+	Last_error_line       uint32     `struc:"uint32,little"`
+	Last_error_block      uint64     `struc:"uint64,little"`
 	Last_error_func       [32]byte  `struc:"pad"`
 	Mount_opts            [64]byte  `struc:"pad"`
-	Usr_quota_inum        int32     `struc:"int32,little"`
-	Grp_quota_inum        int32     `struc:"int32,little"`
-	Overhead_clusters     int32     `struc:"int32,little"`
-	Backup_bgs            [2]int32  `struc:"[2]int32,little"`
+	Usr_quota_inum        uint32     `struc:"uint32,little"`
+	Grp_quota_inum        uint32     `struc:"uint32,little"`
+	Overhead_clusters     uint32     `struc:"uint32,little"`
+	Backup_bgs            [2]uint32  `struc:"[2]uint32,little"`
 	Encrypt_algos         [4]byte   `struc:"pad"`
 	Encrypt_pw_salt       [16]byte  `struc:"pad"`
-	Lpf_ino               int32     `struc:"int32,little"`
-	Prj_quota_inum        int32     `struc:"int32,little"`
-	Checksum_seed         int32     `struc:"int32,little"`
-	Reserved              [98]int32 `struc:"[98]int32,little"`
-	Checksum              int32     `struc:"int32,little"`
+	Lpf_ino               uint32     `struc:"uint32,little"`
+	Prj_quota_inum        uint32     `struc:"uint32,little"`
+	Checksum_seed         uint32     `struc:"uint32,little"`
+	Reserved              [98]uint32 `struc:"[98]uint32,little"`
+	Checksum              uint32     `struc:"uint32,little"`
 };
 
 func (sb *Superblock) FeatureCompatDir_prealloc() bool  { return (sb.Feature_compat&FEATURE_COMPAT_DIR_PREALLOC != 0) }
@@ -189,18 +181,3 @@ func (sb *Superblock) GetBlockSize() int64 {
 	return int64(1024 << uint(sb.Log_block_size))
 }
 
-func getBlockGroupDescriptor(blockGroupNum int64,  sb *Superblock, dev *os.File) *GroupDescriptor {
-	blockSize := sb.GetBlockSize()
-	bgdtLocation := 1024/blockSize + 1
-
-	log.Println(bgdtLocation,blockGroupNum,blockSize)
-	bgd := &GroupDescriptor{}
-	dev.Seek((bgdtLocation+blockGroupNum)*blockSize, 0)
-	if sb.FeatureIncompat64bit() {
-		struc.Unpack(dev, &bgd)
-	} else {
-		struc.Unpack(io.LimitReader(dev, 32), &bgd)
-	}
-	log.Printf("Read block group %d, contents:\n%+v\n", blockGroupNum, bgd)
-	return bgd
-}
