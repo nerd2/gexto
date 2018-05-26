@@ -29,19 +29,30 @@ func NewTestFs(t *testing.T, sizeMb int, fsType string) *TestFs {
 	err = f.Close()
 	require.Nil(t, err)
 
-	td, err := ioutil.TempDir("", "gextotest")
-	require.Nil(t, err)
-
 	err = exec.Command("mkfs." + fsType, f.Name()).Run()
 	require.Nil(t, err)
 
-	err = exec.Command("sudo", "mount", f.Name(), td).Run()
-	require.Nil(t, err)
+	tfs := &TestFs{f.Name(), "", t}
+	return tfs
+}
+
+func (tfs *TestFs) Mount() {
+	out, err := exec.Command("fsck", "-f", "-n", tfs.devFile).CombinedOutput()
+	if err != nil {
+		log.Println(string(out))
+	}
+	require.Nil(tfs.t, err)
+
+	td, err := ioutil.TempDir("", "gextotest")
+	require.Nil(tfs.t, err)
+
+	err = exec.Command("sudo", "mount", tfs.devFile, td).Run()
+	require.Nil(tfs.t, err)
 
 	err = exec.Command("sudo", "chmod", "-R", "777", td).Run()
-	require.Nil(t, err)
+	require.Nil(tfs.t, err)
 
-	return &TestFs{f.Name(), td, t}
+	tfs.mntPath = td
 }
 
 func (tfs *TestFs) Unmount() {
@@ -93,6 +104,7 @@ func (tfs *TestFs) WriteLargeFile(path string, file string, size int) *os.File {
 
 func doTestRead(t *testing.T, fsType string) {
 	tfs := NewTestFs(t, 1100, fsType)
+	tfs.Mount()
 	defer func(){tfs.Close()}()
 
 	text := []byte("hello world")
@@ -144,4 +156,28 @@ func TestIntegrationRead(t *testing.T) {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 	doTestRead(t, "ext2")
 	doTestRead(t, "ext4")
+}
+
+func TestIntegrationWrite(t *testing.T) {
+	log.SetFlags(log.LstdFlags | log.Lshortfile)
+
+	tfs := NewTestFs(t, 1, "ext4")
+	defer func(){tfs.Close()}()
+
+	fs, err := gexto.NewFileSystem(tfs.devFile)
+	require.Nil(t, err)
+	fs.Mkdir("/newtestdir", 0777)
+	fs.Close()
+
+	{
+		fs, err := gexto.NewFileSystem(tfs.devFile)
+		require.Nil(t, err)
+		_, err = fs.Open("/newtestdir")
+		require.Nil(t, err)
+		fs.Close()
+	}
+
+	tfs.Mount()
+	_, err = os.Stat(tfs.mntPath + "/newtestdir")
+	require.Nil(t, err)
 }

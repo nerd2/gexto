@@ -16,6 +16,7 @@ type FileSystem interface {
 	Create(name string) (*File, error)
 	Remove(name string) error
 	Mkdir(name string, perm os.FileMode) error
+	Close() error
 }
 
 func NewFileSystem(devicePath string) (FileSystem, error) {
@@ -29,7 +30,10 @@ func NewFileSystem(devicePath string) (FileSystem, error) {
 	f.Seek(1024, 0)
 
 	ret.dev = f
-	ret.sb = &Superblock{}
+	ret.sb = &Superblock{
+		address: 1024,
+		fs: &ret,
+	}
 	err = struc.Unpack(f, ret.sb)
 	if err != nil {
 		return nil, err
@@ -42,6 +46,8 @@ func NewFileSystem(devicePath string) (FileSystem, error) {
 	if numBlockGroups != int64(numBlockGroups2) {
 		return nil, fmt.Errorf("Block/inode mismatch: %d %d %d", ret.sb.GetBlockCount(), numBlockGroups, numBlockGroups2)
 	}
+
+	ret.sb.numBlockGroups = numBlockGroups
 
 	return &ret, nil
 }

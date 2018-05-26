@@ -1,5 +1,9 @@
 package gexto
 
+import (
+	"github.com/lunixbochs/struc"
+)
+
 type Superblock struct {
 	InodeCount         uint32 `struc:"uint32,little"`
 	BlockCount_lo      uint32 `struc:"uint32,little"`
@@ -79,25 +83,28 @@ type Superblock struct {
 	First_error_time      uint32     `struc:"uint32,little"`
 	First_error_ino       uint32     `struc:"uint32,little"`
 	First_error_block     uint64     `struc:"uint64,little"`
-	First_error_func      [32]byte  `struc:"pad"`
+	First_error_func      [32]byte  `struc:"[32]pad"`
 	First_error_line      uint32     `struc:"uint32,little"`
 	Last_error_time       uint32     `struc:"uint32,little"`
 	Last_error_ino        uint32     `struc:"uint32,little"`
 	Last_error_line       uint32     `struc:"uint32,little"`
 	Last_error_block      uint64     `struc:"uint64,little"`
-	Last_error_func       [32]byte  `struc:"pad"`
-	Mount_opts            [64]byte  `struc:"pad"`
+	Last_error_func       [32]byte  `struc:"[32]pad"`
+	Mount_opts            [64]byte  `struc:"[64]pad"`
 	Usr_quota_inum        uint32     `struc:"uint32,little"`
 	Grp_quota_inum        uint32     `struc:"uint32,little"`
 	Overhead_clusters     uint32     `struc:"uint32,little"`
 	Backup_bgs            [2]uint32  `struc:"[2]uint32,little"`
-	Encrypt_algos         [4]byte   `struc:"pad"`
-	Encrypt_pw_salt       [16]byte  `struc:"pad"`
+	Encrypt_algos         [4]byte   `struc:"[4]pad"`
+	Encrypt_pw_salt       [16]byte  `struc:"[16]pad"`
 	Lpf_ino               uint32     `struc:"uint32,little"`
 	Prj_quota_inum        uint32     `struc:"uint32,little"`
 	Checksum_seed         uint32     `struc:"uint32,little"`
 	Reserved              [98]uint32 `struc:"[98]uint32,little"`
 	Checksum              uint32     `struc:"uint32,little"`
+	address               int64
+	fs                    *fs
+	numBlockGroups        int64
 };
 
 func (sb *Superblock) FeatureCompatDir_prealloc() bool  { return (sb.Feature_compat&FEATURE_COMPAT_DIR_PREALLOC != 0) }
@@ -149,3 +156,18 @@ func (sb *Superblock) GetBlockSize() int64 {
 	return int64(1024 << uint(sb.Log_block_size))
 }
 
+func (sb *Superblock) UpdateCsumAndWriteback() {
+	cs := NewChecksummer(sb)
+
+	size, _ := struc.Sizeof(sb)
+	cs.SetLimit(size - 4)
+	struc.Pack(cs, sb)
+	sb.Checksum = cs.Get()
+
+	sb.fs.dev.Seek(sb.address, 0)
+	struc.Pack(sb.fs.dev, sb)
+}
+
+func (sb *Superblock) GetGroupsPerFlex() int64 {
+	return 1 << sb.Log_groupPer_flex
+}

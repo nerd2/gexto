@@ -47,6 +47,14 @@ type DirectoryEntry2 struct {
 	Name string `struc:"[]byte"`
 }
 
+type DirectoryEntryCsum struct {
+	FakeInodeZero uint32 `struc:"uint32,little"`
+	Rec_len uint16 `struc:"uint16,little"`
+	FakeName_len uint8 `struc:"uint8"`
+	FakeFileType uint8 `struc:"uint8"`
+	Checksum uint32 `struc:"uint32,little"`
+}
+
 type Inode struct {
 	Mode           uint16   `struc:"uint16,little"`
 	Uid            uint16   `struc:"uint16,little"`
@@ -60,7 +68,7 @@ type Inode struct {
 	Blocks_lo      uint32   `struc:"uint32,little"`
 	Flags          uint32   `struc:"uint32,little"`
 	Osd1           uint32   `struc:"uint32,little"`
-	BlockOrExtents []byte   `struc:"[60]byte,little"`
+	BlockOrExtents [60]byte `struc:"[60]byte,little"`
 	Generation     uint32   `struc:"uint32,little"`
 	File_acl_lo    uint32   `struc:"uint32,little"`
 	Size_high      uint32   `struc:"uint32,little"`
@@ -117,11 +125,83 @@ func (inode *Inode) ReadDirectory() []DirectoryEntry2 {
 		} else if err != nil {
 			log.Fatalf(err.Error())
 		}
-		//log.Printf("dirEntry %s: %+v", string(dirEntry.Name), dirEntry)
+		log.Printf("dirEntry %s: %+v", string(dirEntry.Name), dirEntry)
 		f.Seek(int64(dirEntry.Rec_len) + start, 0)
+		if dirEntry.Rec_len < 9 {
+			log.Fatalf("corrupt direntry")
+		}
 		ret = append(ret, dirEntry)
 	}
 	return ret
+}
+
+func (inode *Inode) AddBlocks(n int64) (blockNum int64, contiguousBlocks int64) {
+	if !inode.UsesExtents() {
+		log.Fatalf("Not implemented")
+	}
+
+	n=1 // TODO: longer contigs
+
+	r := inode.fs.dev
+	r.Seek(inode.address + 40, 0)
+
+	for {
+		headerPos, _ := r.Seek(0,1)
+		extentHeader := &ExtentHeader{}
+		struc.Unpack(r, &extentHeader)
+		//log.Printf("extent header: %+v", extentHeader)
+		if extentHeader.Depth == 0 { // Leaf
+			max := int64(0)
+			for i := uint16(0); i < extentHeader.Entries; i++ {
+				extent := &Extent{}
+				struc.Unpack(r, &extent)
+				upper := int64(extent.Block) + int64(extent.Len)
+				if upper > max {
+					max = upper
+				}
+			}
+			if extentHeader.Entries < extentHeader.Max {
+				savePos, _ := r.Seek(0, 1)
+				blockNum := inode.fs.GetFreeBlock()
+				newExtent := &Extent{
+					Block: uint32(max),
+					Len: uint16(n),
+					Start_hi: uint16(blockNum >> 32),
+					Start_lo: uint32(blockNum & 0xFFFFFFFF),
+				}
+				r.Seek(savePos, 0)
+				struc.Pack(r, &newExtent)
+				extentHeader.Entries++
+				//log.Println("Extended to", extentHeader.Entries, headerPos)
+				r.Seek(headerPos, 0)
+				struc.Pack(r, extentHeader)
+				r.Seek(inode.address, 0)
+				struc.Unpack(r, inode)
+				inode.Blocks_lo += uint32(n*inode.fs.sb.GetBlockSize()/512)
+				inode.UpdateCsumAndWriteback()
+
+				return blockNum, n
+			} else {
+				log.Fatalf("Unable to extend no room")
+			}
+		} else {
+			max := uint32(0)
+			var best *ExtentInternal
+			for i := uint16(0); i < extentHeader.Entries; i++ {
+				extent := &ExtentInternal{}
+				struc.Unpack(r, &extent)
+				//log.Printf("extent internal: %+v", extent)
+				if extent.Block > max {
+					best = extent
+				}
+			}
+
+			newBlock := int64(best.Leaf_high<<32) + int64(best.Leaf_low)
+			r.Seek(newBlock*inode.fs.sb.GetBlockSize(), 0)
+		}
+	}
+
+	return 0,0
 }
 
 func (inode *Inode) UpdateCsumAndWriteback() {
@@ -144,33 +224,32 @@ func (inode *Inode) UpdateCsumAndWriteback() {
 }
 
 // Returns the blockId of the file block, and the number of contiguous blocks
-func (inode *Inode) GetBlockPtr(num int64) (int64, int64) {
+func (inode *Inode) GetBlockPtr(num int64) (int64, int64, bool) {
 	if inode.UsesExtents() {
-		log.Println("Finding", num)
-		r := io.Reader(bytes.NewReader(inode.BlockOrExtents))
+		//log.Println("Finding", num)
+		r := io.Reader(bytes.NewReader(inode.BlockOrExtents[:]))
 
 		for {
 			extentHeader := &ExtentHeader{}
 			struc.Unpack(r, &extentHeader)
-			log.Printf("extent header: %+v", extentHeader)
+			//log.Printf("extent header: %+v", extentHeader)
 			if extentHeader.Depth == 0 { // Leaf
 				for i := uint16(0); i < extentHeader.Entries; i++ {
 					extent := &Extent{}
 					struc.Unpack(r, &extent)
-					log.Printf("extent leaf: %+v", extent)
+					//log.Printf("extent leaf: %+v", extent)
 					if int64(extent.Block) <= num && int64(extent.Block)+int64(extent.Len) > num {
-						log.Println("Found")
-						return int64(extent.Start_hi<<32) + int64(extent.Start_lo) + num - int64(extent.Block), int64(extent.Block) + int64(extent.Len) - num
+						//log.Println("Found")
+						return int64(extent.Start_hi<<32) + int64(extent.Start_lo) + num - int64(extent.Block), int64(extent.Block) + int64(extent.Len) - num, true
 					}
 				}
-				log.Fatalf("Could not find in extent tree")
-				return 0,0
+				return 0, 0, false
 			} else {
 				found := false
 				for i := uint16(0); i < extentHeader.Entries; i++ {
 					extent := &ExtentInternal{}
 					struc.Unpack(r, &extent)
-					log.Printf("extent internal: %+v", extent)
+					//log.Printf("extent internal: %+v", extent)
 					if int64(extent.Block) <= num {
 						newBlock := int64(extent.Leaf_high<<32) + int64(extent.Leaf_low)
 						inode.fs.dev.Seek(newBlock * inode.fs.sb.GetBlockSize(), 0)
@@ -180,8 +259,7 @@ func (inode *Inode) GetBlockPtr(num int64) (int64, int64) {
 					}
 				}
 				if !found {
-					log.Fatalf("Could not find in extent tree")
-					return 0,0
+					return 0,0, false
 				}
 			}
 		}
@@ -189,7 +267,7 @@ func (inode *Inode) GetBlockPtr(num int64) (int64, int64) {
 	}
 
 	if num < 12 {
-		return int64(binary.LittleEndian.Uint32(inode.BlockOrExtents[4*num:])),1
+		return int64(binary.LittleEndian.Uint32(inode.BlockOrExtents[4*num:])), 1, true
 	}
 
 	num -= 12
@@ -197,14 +275,14 @@ func (inode *Inode) GetBlockPtr(num int64) (int64, int64) {
 	indirectsPerBlock := inode.fs.sb.GetBlockSize() / 4
 	if num < indirectsPerBlock {
 		ptr := int64(binary.LittleEndian.Uint32(inode.BlockOrExtents[4*12:]))
-		return inode.getIndirectBlockPtr(ptr, num),1
+		return inode.getIndirectBlockPtr(ptr, num),1, true
 	}
 	num -= indirectsPerBlock
 
 	if num < indirectsPerBlock * indirectsPerBlock {
 		ptr := int64(binary.LittleEndian.Uint32(inode.BlockOrExtents[4*13:]))
 		l1 := inode.getIndirectBlockPtr(ptr, num / indirectsPerBlock)
-		return inode.getIndirectBlockPtr(l1, num % indirectsPerBlock),1
+		return inode.getIndirectBlockPtr(l1, num % indirectsPerBlock),1, true
 	}
 
 	num -= indirectsPerBlock * indirectsPerBlock
@@ -215,11 +293,11 @@ func (inode *Inode) GetBlockPtr(num int64) (int64, int64) {
 		ptr := int64(binary.LittleEndian.Uint32(inode.BlockOrExtents[4*14:]))
 		l1 := inode.getIndirectBlockPtr(ptr, num / (indirectsPerBlock * indirectsPerBlock))
 		l2 := inode.getIndirectBlockPtr(l1, (num / indirectsPerBlock) % indirectsPerBlock)
-		return inode.getIndirectBlockPtr(l2, num % (indirectsPerBlock * indirectsPerBlock)),1
+		return inode.getIndirectBlockPtr(l2, num % (indirectsPerBlock * indirectsPerBlock)),1, true
 	}
 
 	log.Fatalf("Exceeded maximum possible block count")
-	return 0,0
+	return 0,0,false
 }
 
 func (inode *Inode) getIndirectBlockPtr(blockNum int64, offset int64) int64 {
@@ -231,4 +309,10 @@ func (inode *Inode) getIndirectBlockPtr(blockNum int64, offset int64) int64 {
 
 func (inode *Inode) GetSize() int64 {
 	return (int64(inode.Size_high) << 32) | int64(inode.Size_lo)
+}
+
+func (inode *Inode) SetSize(i int64) {
+	inode.Size_high = uint32(i >> 32)
+	inode.Size_lo = uint32(i & 0xFFFFFFFF)
+	inode.UpdateCsumAndWriteback()
 }
