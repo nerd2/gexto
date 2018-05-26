@@ -7,7 +7,8 @@ import (
 	"log"
 	"os"
 
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"crypto/rand"
 )
 
 func createAndMountFs() (string, string, error) {
@@ -16,7 +17,7 @@ func createAndMountFs() (string, string, error) {
 		log.Fatalln(err)
 	}
 	blank := make([]byte, 1024*1024)
-	for i := 0; i < 10; i++ {
+	for i := 0; i < 1024; i++ {
 		f.Write(blank)
 	}
 	f.Close()
@@ -51,24 +52,62 @@ func unmountFs(fname string) error {
 
 func TestIntegrationRead(t *testing.T) {
 	devPath, mntPath, _ := createAndMountFs()
-	if false {
+	if true {
 		defer os.Remove(devPath)
 	} else {
 		log.Println(devPath)
 	}
 
 	text := []byte("hello world")
-	err := ioutil.WriteFile(mntPath + "/testfile", text, 777)
-	unmountFs(devPath)
-	if err != nil {
-		log.Fatalln(err)
+	err := ioutil.WriteFile(mntPath + "/smallfile", text, 777)
+	require.Nil(t, err)
+
+	largefile, _ := ioutil.TempFile("", "gexto")
+	len := 987654321
+	for len > 0 {
+		dataLen := 512*1024
+		if dataLen > len {
+			dataLen = len
+		}
+		data := make([]byte, dataLen)
+		n, _ := rand.Read(data)
+		m, _ := largefile.Write(data[:n])
+		len -= m
 	}
+	err = largefile.Close()
+	require.Nil(t, err)
+	defer os.Remove(largefile.Name())
+	err = exec.Command("cp", largefile.Name(), mntPath + "/largefile").Run()
+	require.Nil(t, err)
+	unmountFs(devPath)
 
 	fs, err := NewFileSystem(devPath)
-	assert.Nil(t, err)
-	file, err := fs.Open("/testfile")
-	assert.Nil(t, err)
-	out, err := ioutil.ReadAll(file)
-	assert.Nil(t, err)
-	assert.Equal(t, text, out)
+	require.Nil(t, err)
+
+	{
+		file, err := fs.Open("/smallfile")
+		require.Nil(t, err)
+		out, err := ioutil.ReadAll(file)
+		require.Nil(t, err)
+		require.Equal(t, text, out)
+	}
+
+	{
+		file, err := fs.Open("/largefile")
+		require.Nil(t, err)
+		comparefile, err := os.Open(largefile.Name())
+		for err == nil {
+			a := make([]byte, 1024*1024)
+			b := make([]byte, 1024*1024)
+			var na int
+			na, err = file.Read(a)
+			nb, err2 := comparefile.Read(b)
+			require.Equal(t, na, nb)
+			log.Printf("Read %d (%d)", na, nb)
+			require.Equal(t, a[:na], b[:nb])
+			require.Equal(t, na, nb)
+			require.Equal(t, err, err2)
+		}
+	}
+
 }
