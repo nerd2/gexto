@@ -18,7 +18,7 @@ type TestFs struct {
 	t *testing.T
 }
 
-func NewTestFs(t *testing.T, sizeMb int) *TestFs {
+func NewTestFs(t *testing.T, sizeMb int, fsType string) *TestFs {
 	f, err := ioutil.TempFile("", "gextotest")
 	require.Nil(t, err)
 	blank := make([]byte, 1024*1024)
@@ -32,7 +32,7 @@ func NewTestFs(t *testing.T, sizeMb int) *TestFs {
 	td, err := ioutil.TempDir("", "gextotest")
 	require.Nil(t, err)
 
-	err = exec.Command("mkfs.ext2", f.Name()).Run()
+	err = exec.Command("mkfs." + fsType, f.Name()).Run()
 	require.Nil(t, err)
 
 	err = exec.Command("sudo", "mount", f.Name(), td).Run()
@@ -90,8 +90,8 @@ func (tfs *TestFs) WriteLargeFile(path string, file string, size int) *os.File {
 	return largefile
 }
 
-func TestIntegrationRead(t *testing.T) {
-	tfs := NewTestFs(t, 1100)
+func doTestRead(t *testing.T, fsType string) {
+	tfs := NewTestFs(t, 1100, fsType)
 	defer func(){tfs.Close()}()
 
 	text := []byte("hello world")
@@ -137,5 +137,10 @@ func TestIntegrationRead(t *testing.T) {
 			require.Equal(t, err, err2)
 		}
 	}
+}
 
+func TestIntegrationRead(t *testing.T) {
+	log.SetFlags(log.LstdFlags | log.Lshortfile)
+	doTestRead(t, "ext2")
+	//doTestRead(t, "ext4")
 }

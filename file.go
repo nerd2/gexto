@@ -2,6 +2,7 @@ package gexto
 
 import (
 	"io"
+	"fmt"
 )
 
 type extFile struct {
@@ -47,4 +48,23 @@ func (f *extFile) Read(p []byte) (n int, err error) {
 	f.pos += offset
 	//log.Println(int(offset))
 	return int(offset), nil
+}
+
+func (f *extFile) Seek(offset int64, whence int) (ret int64, err error) {
+	switch whence {
+	case 0:
+		f.pos = offset
+	case 1:
+		f.pos += offset
+	case 2:
+		f.pos = f.inode.GetSize() - offset
+	default:
+		return 0, fmt.Errorf("Unsupported whence")
+	}
+
+	if f.pos >= f.inode.GetSize() {
+		return f.inode.GetSize(), io.EOF
+	} else {
+		return f.pos, nil
+	}
 }

@@ -4,7 +4,7 @@ import (
 	"github.com/lunixbochs/struc"
 	"encoding/binary"
 	"log"
-	"bytes"
+	"io"
 )
 
 type Inode struct {
@@ -48,52 +48,49 @@ func (inode *Inode) UsesDirectoryHashTree() bool {
 }
 
 func (inode *Inode) ReadDirectory() []DirectoryEntry2 {
-	sb := inode.fs.sb
-	dev := inode.fs.dev
-
 	if inode.UsesDirectoryHashTree() {
 		log.Fatalf("Not implemented")
 	}
-	if inode.UsesExtents() {
-		log.Fatalf("Not implemented")
 
-		extentHeader := &ExtentHeader{}
-		struc.Unpack(bytes.NewReader([]byte(inode.BlockOrExtents)), &extentHeader)
-		log.Printf("extent header: %+v", extentHeader)
-		if extentHeader.Depth == 0 { // Leaf
-			for i := int16(0); i < extentHeader.Entries; i++ {
-				extent := &Extent{}
-				struc.Unpack(bytes.NewReader([]byte(inode.BlockOrExtents)[12 + i * 12:]), &extent)
-				log.Printf("extent: %+v", extent)
-			}
-		} else {
-			log.Fatalf("Not implemented")
-		}
-		return nil
-	} else {
-		ret := []DirectoryEntry2{}
+	f := &File{extFile{
+		fs: inode.fs,
+		inode: inode,
+		pos: 0,
+	}}
 
-		for blockTableIndex := int64(0); blockTableIndex < (inode.GetSize() + sb.GetBlockSize() - 1) / sb.GetBlockSize(); blockTableIndex++ {
-			blockNum := inode.GetBlockPtr(blockTableIndex)
-			blockStart := int64(blockNum) * sb.GetBlockSize()
-			pos := blockStart
-			for i := 0; i < 16; i++ {
-				dev.Seek(pos, 0)
-				dirEntry := DirectoryEntry2{}
-				struc.Unpack(dev, &dirEntry)
-				//log.Printf("dirEntry %s: %+v", string(dirEntry.Name), dirEntry)
-				pos += int64(dirEntry.Rec_len)
-				ret = append(ret, dirEntry)
-				if pos == blockStart+sb.GetBlockSize() {
-					//log.Printf("Reached end of block, next block")
-					break
-				} else if pos > blockStart + sb.GetBlockSize() {
-					log.Fatalf("Unexpected overflow out of block when directory listing")
-				}
-			}
+	ret := []DirectoryEntry2{}
+	for {
+		start, _ := f.Seek(0, 1)
+		dirEntry := DirectoryEntry2{}
+		err := struc.Unpack(f, &dirEntry)
+		if err == io.EOF {
+			break
+		} else if err != nil {
+			log.Fatalf(err.Error())
 		}
-		return ret
+		//log.Printf("dirEntry %s: %+v", string(dirEntry.Name), dirEntry)
+		f.Seek(int64(dirEntry.Rec_len) + start, 0)
+		ret = append(ret, dirEntry)
 	}
+	return ret
+
+	//if inode.UsesExtents() {
+	//	log.Fatalf("Not implemented")
+	//
+	//	extentHeader := &ExtentHeader{}
+	//	struc.Unpack(bytes.NewReader([]byte(inode.BlockOrExtents)), &extentHeader)
+	//	log.Printf("extent header: %+v", extentHeader)
+	//	if extentHeader.Depth == 0 { // Leaf
+	//		for i := int16(0); i < extentHeader.Entries; i++ {
+	//			extent := &Extent{}
+	//			struc.Unpack(bytes.NewReader([]byte(inode.BlockOrExtents)[12+i*12:]), &extent)
+	//			log.Printf("extent: %+v", extent)
+	//		}
+	//	} else {
+	//		log.Fatalf("Not implemented")
+	//	}
+	//	return nil
+	//}
 }
 
 func (inode *Inode) GetBlockPtr(num int64) int64 {
