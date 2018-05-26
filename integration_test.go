@@ -1,4 +1,4 @@
-package gexto
+package gexto_test
 
 import (
 	"testing"
@@ -9,79 +9,100 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"crypto/rand"
+	"github.com/nerd2/gexto"
 )
 
-func createAndMountFs() (string, string, error) {
+type TestFs struct {
+	devFile string
+	mntPath string
+	t *testing.T
+}
+
+func NewTestFs(t *testing.T, sizeMb int) *TestFs {
 	f, err := ioutil.TempFile("", "gextotest")
-	if err != nil {
-		log.Fatalln(err)
-	}
+	require.Nil(t, err)
 	blank := make([]byte, 1024*1024)
-	for i := 0; i < 1024; i++ {
-		f.Write(blank)
+	for i := 0; i < sizeMb; i++ {
+		_, err = f.Write(blank)
+		require.Nil(t, err)
 	}
-	f.Close()
+	err = f.Close()
+	require.Nil(t, err)
 
 	td, err := ioutil.TempDir("", "gextotest")
-	if err != nil {
-		log.Fatalln(err)
-	}
+	require.Nil(t, err)
 
 	err = exec.Command("mkfs.ext2", f.Name()).Run()
-	if err != nil {
-		log.Fatalln(err)
-	}
+	require.Nil(t, err)
 
 	err = exec.Command("sudo", "mount", f.Name(), td).Run()
-	if err != nil {
-		log.Fatalln(err)
-	}
+	require.Nil(t, err)
 
 	err = exec.Command("sudo", "chmod", "777", td).Run()
-	if err != nil {
-		log.Fatalln(err)
-	}
-
-	return f.Name(), td, nil
-}
-
-func unmountFs(fname string) error {
-	exec.Command("sudo", "umount", fname).Run()
-	return nil
-}
-
-func TestIntegrationRead(t *testing.T) {
-	devPath, mntPath, _ := createAndMountFs()
-	if true {
-		defer os.Remove(devPath)
-	} else {
-		log.Println(devPath)
-	}
-
-	text := []byte("hello world")
-	err := ioutil.WriteFile(mntPath + "/smallfile", text, 777)
 	require.Nil(t, err)
 
+	return &TestFs{f.Name(), td, t}
+}
+
+func (tfs *TestFs) Unmount() {
+	if tfs.mntPath != "" {
+		exec.Command("sudo", "umount", tfs.mntPath).Run()
+		tfs.mntPath = ""
+	}
+}
+
+func (tfs *TestFs) Close() {
+	tfs.Unmount()
+	if true {
+		os.Remove(tfs.devFile)
+	} else {
+		log.Println(tfs.devFile)
+	}
+}
+
+func (tfs *TestFs) WriteSmallFile(path string, file string, b []byte) {
+	err := os.MkdirAll(tfs.mntPath + path, 777)
+	require.Nil(tfs.t, err)
+	err = ioutil.WriteFile(tfs.mntPath + path + "/" + file, b, 777)
+	require.Nil(tfs.t, err)
+}
+
+func (tfs *TestFs) WriteLargeFile(path string, file string, size int) *os.File {
 	largefile, _ := ioutil.TempFile("", "gexto")
-	len := 987654321
-	for len > 0 {
+	for size > 0 {
 		dataLen := 512*1024
-		if dataLen > len {
-			dataLen = len
+		if dataLen > size {
+			dataLen = size
 		}
 		data := make([]byte, dataLen)
-		n, _ := rand.Read(data)
-		m, _ := largefile.Write(data[:n])
-		len -= m
+		n, err := rand.Read(data)
+		require.Nil(tfs.t, err)
+		m, err := largefile.Write(data[:n])
+		require.Nil(tfs.t, err)
+		size -= m
 	}
-	err = largefile.Close()
-	require.Nil(t, err)
-	defer os.Remove(largefile.Name())
-	err = exec.Command("cp", largefile.Name(), mntPath + "/largefile").Run()
-	require.Nil(t, err)
-	unmountFs(devPath)
+	err := largefile.Close()
+	require.Nil(tfs.t, err)
+	err = os.MkdirAll(tfs.mntPath + path, 777)
+	require.Nil(tfs.t, err)
+	err = exec.Command("cp", largefile.Name(), tfs.mntPath + path + file).Run()
+	require.Nil(tfs.t, err)
+	return largefile
+}
 
-	fs, err := NewFileSystem(devPath)
+
+func TestIntegrationRead(t *testing.T) {
+	tfs := NewTestFs(t, 1100)
+	defer func(){tfs.Close()}()
+
+	text := []byte("hello world")
+	tfs.WriteSmallFile("/", "smallfile", text)
+	//tfs.WriteSmallFile("/dir1/dir2", "smallfile", text)
+	largefile := tfs.WriteLargeFile("/", "largefile", 987654321)
+	defer os.Remove(largefile.Name())
+	tfs.Unmount()
+
+	fs, err := gexto.NewFileSystem(tfs.devFile)
 	require.Nil(t, err)
 
 	{
@@ -91,6 +112,14 @@ func TestIntegrationRead(t *testing.T) {
 		require.Nil(t, err)
 		require.Equal(t, text, out)
 	}
+
+	//{
+	//	file, err := fs.Open("/dir1/dir2/smallfile")
+	//	require.Nil(t, err)
+	//	out, err := ioutil.ReadAll(file)
+	//	require.Nil(t, err)
+	//	require.Equal(t, text, out)
+	//}
 
 	{
 		file, err := fs.Open("/largefile")
