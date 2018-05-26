@@ -47,6 +47,7 @@ func NewTestFs(t *testing.T, sizeMb int, fsType string) *TestFs {
 func (tfs *TestFs) Unmount() {
 	if tfs.mntPath != "" {
 		exec.Command("sudo", "umount", tfs.mntPath).Run()
+		exec.Command("sudo", "rm", "-rf", tfs.mntPath).Run()
 		tfs.mntPath = ""
 	}
 }
@@ -142,5 +143,5 @@ func doTestRead(t *testing.T, fsType string) {
 func TestIntegrationRead(t *testing.T) {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 	doTestRead(t, "ext2")
-	//doTestRead(t, "ext4")
+	doTestRead(t, "ext4")
 }

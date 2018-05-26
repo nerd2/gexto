@@ -27,11 +27,11 @@ func (f *extFile) Read(p []byte) (n int, err error) {
 	}
 
 	for len > 0 {
-		blockPtr := f.inode.GetBlockPtr(blockNum)
+		blockPtr, contiguousBlocks := f.inode.GetBlockPtr(blockNum)
 
 		f.fs.dev.Seek(blockPtr * f.fs.sb.GetBlockSize() + blockPos, 0)
 
-		blockReadLen := f.fs.sb.GetBlockSize() - blockPos
+		blockReadLen := contiguousBlocks * f.fs.sb.GetBlockSize() - blockPos
 		if blockReadLen > len {
 			blockReadLen = len
 		}

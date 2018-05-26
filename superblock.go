@@ -1,37 +1,5 @@
 package gexto
 
-type MoveExtent struct {
-	Reserved    int32  `struc:"int32,little"`
-	Donor_fd    int32  `struc:"int32,little"`
-	Orig_start  uint64 `struc:"uint64,little"`
-	Donor_start uint64 `struc:"uint64,little"`
-	Len         uint64 `struc:"uint64,little"`
-	Moved_len   uint64 `struc:"uint64,little"`
-};
-
-type ExtentHeader struct {
-	Magic      int16 `struc:"int16,little"`
-	Entries    int16 `struc:"int16,little"`
-	Max        int16 `struc:"int16,little"`
-	Depth      int16 `struc:"int16,little"`
-	Generation int32 `struc:"int32,little"`
-}
-
-type Extent struct {
-	Block    int32 `struc:"int32,little"`
-	Len      int16 `struc:"int16,little"`
-	Start_hi int16 `struc:"int16,little"`
-	Start_lo int32 `struc:"int32,little"`
-}
-
-type DirectoryEntry2 struct {
-	Inode uint32 `struc:"uint32,little"`
-	Rec_len uint16 `struc:"uint16,little"`
-	Name_len uint8 `struc:"uint8,sizeof=Name"`
-	Flags uint8 `struc:"uint8"`
-	Name string `struc:"[]byte"`
-}
-
 type Superblock struct {
 	InodeCount         uint32 `struc:"uint32,little"`
 	BlockCount_lo      uint32 `struc:"uint32,little"`
