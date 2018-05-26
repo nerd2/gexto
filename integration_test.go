@@ -1,4 +1,4 @@
-package main
+package gexto
 
 import (
 	"testing"
@@ -6,9 +6,11 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
+
+	"github.com/stretchr/testify/assert"
 )
 
-func TestIntegrationRead(t *testing.T) {
+func createAndMountFs() (string, string, error) {
 	f, err := ioutil.TempFile("", "gextotest")
 	if err != nil {
 		log.Fatalln(err)
@@ -18,7 +20,6 @@ func TestIntegrationRead(t *testing.T) {
 		f.Write(blank)
 	}
 	f.Close()
-	defer os.Remove(f.Name())
 
 	td, err := ioutil.TempDir("", "gextotest")
 	if err != nil {
@@ -40,14 +41,34 @@ func TestIntegrationRead(t *testing.T) {
 		log.Fatalln(err)
 	}
 
-	defer func() {exec.Command("sudo", "umount", f.Name()).Run()}()
+	return f.Name(), td, nil
+}
 
-	err = ioutil.WriteFile(td + "/testfile", []byte("hello world"), 777)
+func unmountFs(fname string) error {
+	exec.Command("sudo", "umount", fname).Run()
+	return nil
+}
+
+func TestIntegrationRead(t *testing.T) {
+	devPath, mntPath, _ := createAndMountFs()
+	if false {
+		defer os.Remove(devPath)
+	} else {
+		log.Println(devPath)
+	}
+
+	text := []byte("hello world")
+	err := ioutil.WriteFile(mntPath + "/testfile", text, 777)
+	unmountFs(devPath)
 	if err != nil {
 		log.Fatalln(err)
 	}
 
-	exec.Command("sudo", "umount", f.Name()).Run()
-	
-	ReadFile(f.Name())
+	fs, err := NewFileSystem(devPath)
+	assert.Nil(t, err)
+	file, err := fs.Open("/testfile")
+	assert.Nil(t, err)
+	out, err := ioutil.ReadAll(file)
+	assert.Nil(t, err)
+	assert.Equal(t, text, out)
 }

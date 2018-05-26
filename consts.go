@@ -1,4 +1,4 @@
-package main
+package gexto
 
 const BAD_INO = 1
 const ROOT_INO = 2
