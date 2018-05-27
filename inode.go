@@ -65,7 +65,14 @@ type Inode struct {
 	File_acl_lo    uint32   `struc:"uint32,little"`
 	Size_high      uint32   `struc:"uint32,little"`
 	Obso_faddr     uint32   `struc:"uint32,little"`
-	Osd2           [12]byte `struc:"[12]byte"`
+	// OSD2 - linux only starts
+	Blocks_high    uint16   `struc:"uint16,little"`
+	File_acl_high  uint16   `struc:"uint16,little"`
+	Uid_high       uint16   `struc:"uint16,little"`
+	Gid_high       uint16   `struc:"uint16,little"`
+	Checksum_low   uint16   `struc:"uint16,little"`
+	Unused         uint16   `struc:"uint16,little"`
+	// OSD2 - linux only ends
 	Extra_isize    uint16   `struc:"uint16,little"`
 	Checksum_hi    uint16   `struc:"uint16,little"`
 	Ctime_extra    uint32   `struc:"uint32,little"`
@@ -76,6 +83,8 @@ type Inode struct {
 	Version_hi     uint32   `struc:"uint32,little"`
 	Projid         uint32   `struc:"uint32,little"`
 	fs             *fs
+	address        int64
+	num            int64
 };
 
 
@@ -113,6 +122,25 @@ func (inode *Inode) ReadDirectory() []DirectoryEntry2 {
 		ret = append(ret, dirEntry)
 	}
 	return ret
+}
+
+func (inode *Inode) UpdateCsumAndWriteback() {
+	if inode.fs.sb.Inode_size != 128 {
+		log.Fatalln("Unsupported inode size", inode.fs.sb.Inode_size)
+	}
+
+	cs := NewChecksummer(inode.fs.sb)
+
+	cs.Write(inode.fs.sb.Uuid[:])
+	cs.WriteUint32(uint32(inode.num))
+	cs.WriteUint32(uint32(inode.Generation))
+	inode.Checksum_low = 0
+	cs.SetLimit(128)
+	struc.Pack(cs, inode)
+	inode.Checksum_low = uint16(cs.Get() & 0xFFFF)
+
+	inode.fs.dev.Seek(inode.address, 0)
+	struc.Pack(inode.fs.dev, inode)
 }
 
 // Returns the blockId of the file block, and the number of contiguous blocks

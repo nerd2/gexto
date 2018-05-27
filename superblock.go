@@ -33,9 +33,9 @@ type Superblock struct {
 	Feature_compat         uint32    `struc:"uint32,little"`
 	Feature_incompat       uint32    `struc:"uint32,little"`
 	Feature_ro_compat      uint32    `struc:"uint32,little"`
-	Uuid                   [16]byte `struc:"byte"`
-	Volume_name            [16]byte `struc:"byte"`
-	Last_mounted           [64]byte `struc:"byte"`
+	Uuid                   [16]byte `struc:"[16]byte"`
+	Volume_name            [16]byte `struc:"[16]byte"`
+	Last_mounted           [64]byte `struc:"[64]byte"`
 	Algorithm_usage_bitmap uint32    `struc:"uint32,little"`
 	// Performance hints
 	Prealloc_blocks     byte  `struc:"byte"`
@@ -43,7 +43,7 @@ type Superblock struct {
 	Reserved_gdt_blocks uint16 `struc:"uint16,little"`
 	// Journal
 
-	Journal_Uuid       [16]byte  `struc:"byte"`
+	Journal_Uuid       [16]byte  `struc:"[16]byte"`
 	Journal_inum       uint32     `struc:"uint32,little"`
 	Journal_dev        uint32     `struc:"uint32,little"`
 	Last_orphan        uint32     `struc:"uint32,little"`

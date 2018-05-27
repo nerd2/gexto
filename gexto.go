@@ -4,6 +4,7 @@ import (
 	"os"
 	"github.com/lunixbochs/struc"
 	"fmt"
+	"syscall"
 )
 
 type File struct {
@@ -18,7 +19,7 @@ type FileSystem interface {
 }
 
 func NewFileSystem(devicePath string) (FileSystem, error) {
-	f, err := os.Open(devicePath)
+	f, err := os.OpenFile(devicePath, syscall.O_RDWR, 0755)
 	if err != nil {
 		return nil, err
 	}

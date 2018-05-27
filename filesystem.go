@@ -71,7 +71,10 @@ func (fs *fs) getInode(inodeAddress int64) *Inode {
 	log.Printf("%d %d %d %d", bgd.GetInodeTableLoc(fs.sb), fs.sb.GetBlockSize(), index, fs.sb.Inode_size)
 	fs.dev.Seek(pos, 0)
 
-	inode := &Inode{fs:fs}
+	inode := &Inode{
+		fs: fs,
+		address: pos,
+		num: inodeAddress}
 	struc.Unpack(fs.dev, &inode)
 	log.Printf("Read inode at offset %d, contents:\n%+v\n", pos, inode)
 	return inode
