@@ -24,7 +24,6 @@ func (fs *fs) Open(name string) (*File, error) {
 			continue
 		}
 
-		log.Println(part)
 		inode = fs.getInode(inodeNum)
 		dirContents := inode.ReadDirectory()
 		found := false
@@ -86,6 +85,7 @@ func (fs *fs) Mkdir(path string, perm os.FileMode) error {
 	name := parts[len(parts)-1]
 
 	newFile := fs.CreateNewFile()
+	log.Printf("Creating new directory with inode %d", newFile.inode.num)
 
 	{
 		checksummer := NewChecksummer(inode.fs.sb)

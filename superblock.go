@@ -160,8 +160,7 @@ func (sb *Superblock) UpdateCsumAndWriteback() {
 	cs := NewChecksummer(sb)
 
 	size, _ := struc.Sizeof(sb)
-	cs.SetLimit(size - 4)
-	struc.Pack(cs, sb)
+	struc.Pack(LimitWriter(cs, int64(size) - 4), sb)
 	sb.Checksum = cs.Get()
 
 	sb.fs.dev.Seek(sb.address, 0)

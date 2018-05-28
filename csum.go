@@ -10,7 +10,6 @@ type Checksummer interface {
 	io.Writer
 	WriteUint32(uint32)
 	Get() uint32
-	SetLimit(int)
 }
 
 func NewChecksummer(sb *Superblock) Checksummer {
@@ -18,7 +17,6 @@ func NewChecksummer(sb *Superblock) Checksummer {
 		sb: sb,
 		val: 0,
 		table: crc32.MakeTable(crc32.Castagnoli), // TODO: Check crc used in sb?
-		limit: -1,
 	}
 }
 
@@ -26,25 +24,10 @@ type checksummer struct {
 	sb          *Superblock
 	val         uint32
 	table       *crc32.Table
-	limit       int
-}
-
-func (cs *checksummer) SetLimit(limit int) {
-	cs.limit = limit
 }
 
 func (cs *checksummer) Write(b []byte) (n int, err error) {
-	limit := cs.limit
-	if limit >= 0 {
-		if limit > len(b) {
-			limit = len(b)
-		}
-		cs.limit -= limit
-	} else {
-		limit = len(b)
-	}
-
-	cs.val = crc32.Update(cs.val, cs.table, b[:limit])
+	cs.val = crc32.Update(cs.val, cs.table, b)
 	return len(b), nil
 }
 

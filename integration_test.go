@@ -167,6 +167,7 @@ func TestIntegrationWrite(t *testing.T) {
 	fs, err := gexto.NewFileSystem(tfs.devFile)
 	require.Nil(t, err)
 	fs.Mkdir("/newtestdir", 0777)
+	fs.Mkdir("/newtestdir/newsubdir", 0777)
 	fs.Close()
 
 	{
@@ -179,5 +180,7 @@ func TestIntegrationWrite(t *testing.T) {
 
 	tfs.Mount()
 	_, err = os.Stat(tfs.mntPath + "/newtestdir")
+	require.Nil(t, err)
+	_, err = os.Stat(tfs.mntPath + "/newtestdir/newsubdir")
 	require.Nil(t, err)
 }

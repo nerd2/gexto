@@ -215,12 +215,11 @@ func (inode *Inode) UpdateCsumAndWriteback() {
 	cs.WriteUint32(uint32(inode.num))
 	cs.WriteUint32(uint32(inode.Generation))
 	inode.Checksum_low = 0
-	cs.SetLimit(128)
-	struc.Pack(cs, inode)
+	struc.Pack(LimitWriter(cs, 128), inode)
 	inode.Checksum_low = uint16(cs.Get() & 0xFFFF)
 
 	inode.fs.dev.Seek(inode.address, 0)
-	struc.Pack(inode.fs.dev, inode)
+	struc.Pack(LimitWriter(inode.fs.dev, 128), inode)
 }
 
 // Returns the blockId of the file block, and the number of contiguous blocks
