@@ -8,8 +8,8 @@ import (
 	"os"
 
 	"github.com/stretchr/testify/require"
-	"crypto/rand"
 	"github.com/nerd2/gexto"
+	"math/rand"
 )
 
 type TestFs struct {
@@ -172,7 +172,8 @@ func TestIntegrationWrite(t *testing.T) {
 	require.Nil(t, err)
 	f, err := fs.Create("/newtestdir/newsubdir/file")
 	require.Nil(t, err)
-	testcontents := []byte("File contents")
+	testcontents := make([]byte, 12345)
+	rand.Read(testcontents)
 	f.Write(testcontents)
 	//f.Close()
 	fs.Close()

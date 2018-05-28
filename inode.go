@@ -140,7 +140,7 @@ func (inode *Inode) AddBlocks(n int64) (blockNum int64, contiguousBlocks int64) 
 		log.Fatalf("Not implemented")
 	}
 
-	n=1 // TODO: longer contigs
+	log.Println("AddBlocks", n)
 
 	r := inode.fs.dev
 	r.Seek(inode.address + 40, 0)
@@ -162,10 +162,10 @@ func (inode *Inode) AddBlocks(n int64) (blockNum int64, contiguousBlocks int64) 
 			}
 			if extentHeader.Entries < extentHeader.Max {
 				savePos, _ := r.Seek(0, 1)
-				blockNum := inode.fs.GetFreeBlock()
+				blockNum, numBlocks := inode.fs.GetFreeBlocks(int(n))
 				newExtent := &Extent{
 					Block: uint32(max),
-					Len: uint16(n),
+					Len: uint16(numBlocks),
 					Start_hi: uint16(blockNum >> 32),
 					Start_lo: uint32(blockNum & 0xFFFFFFFF),
 				}
@@ -177,10 +177,10 @@ func (inode *Inode) AddBlocks(n int64) (blockNum int64, contiguousBlocks int64) 
 				struc.Pack(r, extentHeader)
 				r.Seek(inode.address, 0)
 				struc.Unpack(r, inode)
-				inode.Blocks_lo += uint32(n*inode.fs.sb.GetBlockSize()/512)
+				inode.Blocks_lo += uint32(numBlocks*inode.fs.sb.GetBlockSize()/512)
 				inode.UpdateCsumAndWriteback()
 
-				return blockNum, n
+				return blockNum, numBlocks
 			} else {
 				log.Fatalf("Unable to extend no room")
 			}

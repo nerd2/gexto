@@ -51,6 +51,7 @@ func (fs *fs) Open(name string) (*File, error) {
 }
 
 func (fs *fs) Create(path string) (*File, error) {
+	log.Println("CREATE", path)
 	parts := strings.Split(path, "/")
 
 	inode := fs.getInode(int64(ROOT_INO))
@@ -83,7 +84,6 @@ func (fs *fs) Create(path string) (*File, error) {
 	newFile.inode.Mode |= 0x8000
 	newFile.inode.UpdateCsumAndWriteback()
 
-	log.Println("a")
 	{
 		f := &File{extFile{
 			fs:    fs,
@@ -126,6 +126,7 @@ func (fs *fs) Remove(name string) error {
 }
 
 func (fs *fs) Mkdir(path string, perm os.FileMode) error {
+	log.Println("MKDIR", path)
 	parts := strings.Split(path, "/")
 
 	inode := fs.getInode(int64(ROOT_INO))
@@ -322,14 +323,14 @@ func (fs *fs) CreateNewFile(perm os.FileMode) *File {
 	}}
 }
 
-func (fs *fs) GetFreeBlock() int64 {
+func (fs *fs) GetFreeBlocks(n int) (int64, int64) {
 	for i := int64(0); i < fs.sb.numBlockGroups; i++ {
 		bgd := fs.getBlockGroupDescriptor(i)
-		blockNum := bgd.GetFreeBlock()
+		blockNum, numBlocks := bgd.GetFreeBlocks(int64(n))
 		if blockNum > 0 {
-			return blockNum
+			return blockNum, numBlocks
 		}
 	}
 	log.Fatalf("Failed to find free block")
-	return 0
+	return 0, 0
 }

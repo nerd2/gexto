@@ -125,7 +125,7 @@ func(bgd *GroupDescriptor) GetFreeInode() *Inode {
 	return inode
 }
 
-func(bgd *GroupDescriptor) GetFreeBlock() int64 {
+func(bgd *GroupDescriptor) GetFreeBlocks(n int64) (int64, int64) {
 	// Find free block in bitmap
 	start := bgd.GetBlockBitmapLoc() * bgd.fs.sb.GetBlockSize()
 	bgd.fs.dev.Seek(start, 0)
@@ -135,8 +135,16 @@ func(bgd *GroupDescriptor) GetFreeBlock() int64 {
 		bgd.fs.dev.Read(b)
 		if b[0] != 0xFF {
 			bitNum := bits.TrailingZeros8(^b[0])
+			numFree := bits.TrailingZeros8(uint8((uint16(b[0])|0x100) >> uint(bitNum)))
+			//log.Println(bgd.num, i, b[0], bitNum, numFree, n)
+			if n > int64(numFree) {
+				n = int64(numFree)
+			}
 			subBlockNum = int64(i) * 8 + int64(bitNum)
-			b[0] |= 1 << uint(bitNum)
+			for j := 0; j < int(n); j++ {
+				b[0] |= 1 << uint(bitNum + j)
+			}
+			//log.Println(b[0], n)
 			bgd.fs.dev.Seek(-1, 1)
 			bgd.fs.dev.Write(b)
 			break
@@ -144,7 +152,7 @@ func(bgd *GroupDescriptor) GetFreeBlock() int64 {
 	}
 
 	if subBlockNum < 0 {
-		return 0
+		return 0, 0
 	}
 
 	// Update block bitmap checksum
@@ -157,11 +165,13 @@ func(bgd *GroupDescriptor) GetFreeBlock() int64 {
 	bgd.Block_bitmap_csum_lo = uint16(checksummer.Get() & 0xFFFF)
 	bgd.Block_bitmap_csum_hi = uint16(checksummer.Get() >> 16)
 
-	bgd.Free_blocks_count_lo--
+	newFreeBlocks := ((uint32(bgd.Free_blocks_count_hi) << 16) | uint32(bgd.Free_blocks_count_lo)) - uint32(n)
+	bgd.Free_blocks_count_hi = uint16(newFreeBlocks >> 16)
+	bgd.Free_blocks_count_lo = uint16(newFreeBlocks)
 	bgd.UpdateCsumAndWriteback()
 
-	bgd.fs.sb.Free_blockCount_lo--
+	bgd.fs.sb.Free_blockCount_lo-=uint32(n)
 	bgd.fs.sb.UpdateCsumAndWriteback()
 
-	return bgd.address / bgd.fs.sb.GetBlockSize() + subBlockNum - 1
+	return bgd.address / bgd.fs.sb.GetBlockSize() + subBlockNum - 1, n
 }
