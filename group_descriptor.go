@@ -112,7 +112,7 @@ func(bgd *GroupDescriptor) GetFreeInode() *Inode {
 
 	// Insert in Inode table
 	inode := &Inode{
-		Mode: 0x41FF,
+		Mode: 0,
 		Links_count: 1,
 		Flags: 524288, //TODO: what
 		BlockOrExtents: [60]byte{0x0a, 0xf3, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00},

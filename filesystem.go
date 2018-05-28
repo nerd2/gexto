@@ -41,15 +41,84 @@ func (fs *fs) Open(name string) (*File, error) {
 		}
 	}
 
+	inode = fs.getInode(inodeNum)
+	log.Printf("Inode %d with mode %x", inode.num, inode.Mode)
 	return &File{extFile{
 		fs: fs,
-		inode: fs.getInode(inodeNum),
+		inode: inode,
 		pos: 0,
 	}}, nil
 }
 
-func (fs *fs) Create(name string) (*File, error) {
-	return nil, nil
+func (fs *fs) Create(path string) (*File, error) {
+	parts := strings.Split(path, "/")
+
+	inode := fs.getInode(int64(ROOT_INO))
+
+	for _, part := range parts[:len(parts)-1] {
+		if len(part) == 0 {
+			continue
+		}
+
+		dirContents := inode.ReadDirectory()
+		found := false
+		for i := 0; i < len(dirContents); i++ {
+			//log.Println(string(dirContents[i].Name), part, dirContents[i].Flags, dirContents[i].Inode)
+			if string(dirContents[i].Name) == part {
+				found = true
+				inode = fs.getInode(int64(dirContents[i].Inode))
+				break
+			}
+		}
+
+		if !found {
+			return nil, fmt.Errorf("No such file or directory")
+		}
+	}
+
+	name := parts[len(parts)-1]
+
+	newFile := fs.CreateNewFile(0777)
+	log.Printf("Creating new file with inode %d and perms %d", newFile.inode.num, newFile.inode.Mode)
+	newFile.inode.Mode |= 0x8000
+	newFile.inode.UpdateCsumAndWriteback()
+
+	log.Println("a")
+	{
+		f := &File{extFile{
+			fs:    fs,
+			inode: inode,
+			pos:   0,
+		}}
+		pos, _ := f.Seek(0, 2)
+		dirEntry := DirectoryEntry2{
+			Inode:    uint32(newFile.inode.num),
+			Rec_len:  uint16(1024)-12,
+			Name_len: uint8(len(name)),
+			Flags:    0,
+			Name:     name,
+		}
+		checksummer := NewChecksummer(inode.fs.sb)
+		checksummer.Write(inode.fs.sb.Uuid[:])
+		checksummer.WriteUint32(uint32(inode.num))
+		checksummer.WriteUint32(uint32(inode.Generation))
+		struc.Pack(f, &dirEntry)
+		struc.Pack(checksummer, &dirEntry)
+		newpos, _ := f.Seek(0, 1)
+		blank := make([]byte, pos+1024-12-newpos)
+		f.Write(blank)
+		checksummer.Write(blank)
+		dirSum := DirectoryEntryCsum{
+			FakeInodeZero: 0,
+			Rec_len:  uint16(12),
+			FakeName_len: 0,
+			FakeFileType:    0xDE,
+			Checksum:     checksummer.Get(),
+		}
+		struc.Pack(f, &dirSum)
+	}
+
+	return newFile, nil
 }
 
 func (fs *fs) Remove(name string) error {
@@ -84,8 +153,10 @@ func (fs *fs) Mkdir(path string, perm os.FileMode) error {
 
 	name := parts[len(parts)-1]
 
-	newFile := fs.CreateNewFile()
-	log.Printf("Creating new directory with inode %d", newFile.inode.num)
+	newFile := fs.CreateNewFile(perm)
+	log.Printf("Creating new directory with inode %d and perms %d", newFile.inode.num, newFile.inode.Mode)
+	newFile.inode.Mode |= 0x4000
+	newFile.inode.UpdateCsumAndWriteback()
 
 	{
 		checksummer := NewChecksummer(inode.fs.sb)
@@ -228,7 +299,7 @@ func (fs *fs) getBlockGroupDescriptor(blockGroupNum int64) *GroupDescriptor {
 	return bgd
 }
 
-func (fs *fs) CreateNewFile() *File {
+func (fs *fs) CreateNewFile(perm os.FileMode) *File {
 	var inode *Inode
 	for i := int64(0); i < fs.sb.numBlockGroups; i++ {
 		bgd := fs.getBlockGroupDescriptor(i)
@@ -241,6 +312,9 @@ func (fs *fs) CreateNewFile() *File {
 	if inode == nil {
 		return nil
 	}
+
+	inode.Mode = uint16(perm & 0x1FF)
+	inode.UpdateCsumAndWriteback()
 
 	return &File{extFile{
 		fs: fs,

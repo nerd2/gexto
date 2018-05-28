@@ -166,8 +166,15 @@ func TestIntegrationWrite(t *testing.T) {
 
 	fs, err := gexto.NewFileSystem(tfs.devFile)
 	require.Nil(t, err)
-	fs.Mkdir("/newtestdir", 0777)
-	fs.Mkdir("/newtestdir/newsubdir", 0777)
+	err = fs.Mkdir("/newtestdir", 0777)
+	require.Nil(t, err)
+	err = fs.Mkdir("/newtestdir/newsubdir", 0777)
+	require.Nil(t, err)
+	f, err := fs.Create("/newtestdir/newsubdir/file")
+	require.Nil(t, err)
+	testcontents := []byte("File contents")
+	f.Write(testcontents)
+	//f.Close()
 	fs.Close()
 
 	{
@@ -175,12 +182,21 @@ func TestIntegrationWrite(t *testing.T) {
 		require.Nil(t, err)
 		_, err = fs.Open("/newtestdir")
 		require.Nil(t, err)
+		_, err = fs.Open("/newtestdir/newsubdir")
+		require.Nil(t, err)
+		_, err = fs.Open("/newtestdir/newsubdir/file")
+		require.Nil(t, err)
 		fs.Close()
 	}
 
 	tfs.Mount()
-	_, err = os.Stat(tfs.mntPath + "/newtestdir")
+	stat1, err := os.Stat(tfs.mntPath + "/newtestdir")
 	require.Nil(t, err)
-	_, err = os.Stat(tfs.mntPath + "/newtestdir/newsubdir")
+	require.Equal(t, os.FileMode(0777), stat1.Mode() & 0777)
+	stat2, err := os.Stat(tfs.mntPath + "/newtestdir/newsubdir")
 	require.Nil(t, err)
+	require.Equal(t, os.FileMode(0777), stat2.Mode() & 0777)
+	contents, err := ioutil.ReadFile(tfs.mntPath + "/newtestdir/newsubdir/file")
+	require.Nil(t, err)
+	require.Equal(t, testcontents, contents)
 }
