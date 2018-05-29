@@ -166,6 +166,7 @@ func TestIntegrationWrite(t *testing.T) {
 
 	fs, err := gexto.NewFileSystem(tfs.devFile)
 	require.Nil(t, err)
+	recursiveFillDisk(t, fs, "", 1, rand.New(rand.NewSource(1)))
 	err = fs.Mkdir("/newtestdir", 0777)
 	require.Nil(t, err)
 	err = fs.Mkdir("/newtestdir/newsubdir", 0777)
@@ -200,4 +201,35 @@ func TestIntegrationWrite(t *testing.T) {
 	contents, err := ioutil.ReadFile(tfs.mntPath + "/newtestdir/newsubdir/file")
 	require.Nil(t, err)
 	require.Equal(t, testcontents, contents)
+}
+
+func randomName(len int, rand *rand.Rand) string {
+	len++
+	name := make([]byte, len)
+	for i := 0; i < len; i++ {
+		name[i] = byte('a' + rand.Intn('z'-'a') + rand.Intn(1) * ('A'-'a'))
+	}
+	return string(name)
+}
+
+func recursiveFillDisk(t *testing.T, fs gexto.FileSystem, path string, depth int, rand *rand.Rand) {
+	if depth < 0 {
+		return
+	}
+	nSubDirs := rand.Intn(8)
+	for i := 0; i < nSubDirs; i++ {
+		name := randomName(rand.Intn(12), rand)
+		err := fs.Mkdir(path + "/" + string(name), 0777)
+		require.Nil(t, err)
+		recursiveFillDisk(t, fs, path + "/" + string(name), depth-1, rand)
+	}
+	nFiles := rand.Intn(8)
+	for i := 0; i < nFiles; i++ {
+		name := randomName(rand.Intn(12), rand)
+		f, err := fs.Create(path + "/" + string(name))
+		require.Nil(t, err)
+		b := make([]byte, rand.Intn(10000))
+		rand.Read(b)
+		f.Write(b)
+	}
 }

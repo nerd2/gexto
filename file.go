@@ -57,15 +57,9 @@ func (f *File) Read(p []byte) (n int, err error) {
 }
 
 func (f *File) Write(p []byte) (n int, err error) {
-	// Only support appending for now
-	if f.pos != f.inode.GetSize() {
-		log.Println("unexpected eof", f.pos, f.inode.GetSize())
-		return 0, io.ErrUnexpectedEOF
-	}
-
 	totalLen := len(p)
 
-	//log.Println("Doing write", totalLen)
+	//log.Println("Doing write", totalLen, p)
 
 	for len(p) > 0 {
 		blockNum := f.pos / f.fs.sb.GetBlockSize()
@@ -92,13 +86,16 @@ func (f *File) Write(p []byte) (n int, err error) {
 		}
 
 		f.pos += writable
+		//log.Println("seek", blockPtr * f.fs.sb.GetBlockSize() + blockPos, "write", writable)
 		f.fs.dev.Seek(blockPtr * f.fs.sb.GetBlockSize() + blockPos, 0)
 		f.fs.dev.Write(p[:writable])
 		f.fs.dev.Sync()
 		p = p[writable:]
 	}
 
-	f.inode.SetSize(f.inode.GetSize() + int64(totalLen))
+	if f.inode.GetSize() < f.pos {
+		f.inode.SetSize(f.inode.GetSize() + int64(totalLen))
+	}
 	//log.Println("Write complete")
 
 	return totalLen, nil

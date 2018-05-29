@@ -84,39 +84,11 @@ func (fs *fs) Create(path string) (*File, error) {
 	newFile.inode.Mode |= 0x8000
 	newFile.inode.UpdateCsumAndWriteback()
 
-	{
-		f := &File{extFile{
-			fs:    fs,
-			inode: inode,
-			pos:   0,
-		}}
-		pos, _ := f.Seek(0, 2)
-		dirEntry := DirectoryEntry2{
-			Inode:    uint32(newFile.inode.num),
-			Rec_len:  uint16(1024)-12,
-			Name_len: uint8(len(name)),
-			Flags:    0,
-			Name:     name,
-		}
-		checksummer := NewChecksummer(inode.fs.sb)
-		checksummer.Write(inode.fs.sb.Uuid[:])
-		checksummer.WriteUint32(uint32(inode.num))
-		checksummer.WriteUint32(uint32(inode.Generation))
-		struc.Pack(f, &dirEntry)
-		struc.Pack(checksummer, &dirEntry)
-		newpos, _ := f.Seek(0, 1)
-		blank := make([]byte, pos+1024-12-newpos)
-		f.Write(blank)
-		checksummer.Write(blank)
-		dirSum := DirectoryEntryCsum{
-			FakeInodeZero: 0,
-			Rec_len:  uint16(12),
-			FakeName_len: 0,
-			FakeFileType:    0xDE,
-			Checksum:     checksummer.Get(),
-		}
-		struc.Pack(f, &dirSum)
-	}
+	NewDirectory(inode).AddEntry(&DirectoryEntry2{
+		Inode:    uint32(newFile.inode.num),
+		Flags:    0,
+		Name:     name,
+	})
 
 	return newFile, nil
 }
@@ -204,39 +176,11 @@ func (fs *fs) Mkdir(path string, perm os.FileMode) error {
 		struc.Pack(newFile, &dirSum)
 	}
 
-	{
-		f := &File{extFile{
-			fs:    fs,
-			inode: inode,
-			pos:   0,
-		}}
-		pos, _ := f.Seek(0, 2)
-		dirEntry := DirectoryEntry2{
-			Inode:    uint32(newFile.inode.num),
-			Rec_len:  uint16(1024)-12,
-			Name_len: uint8(len(name)),
-			Flags:    0,
-			Name:     name,
-		}
-		checksummer := NewChecksummer(inode.fs.sb)
-		checksummer.Write(inode.fs.sb.Uuid[:])
-		checksummer.WriteUint32(uint32(inode.num))
-		checksummer.WriteUint32(uint32(inode.Generation))
-		struc.Pack(f, &dirEntry)
-		struc.Pack(checksummer, &dirEntry)
-		newpos, _ := f.Seek(0, 1)
-		blank := make([]byte, pos+1024-12-newpos)
-		f.Write(blank)
-		checksummer.Write(blank)
-		dirSum := DirectoryEntryCsum{
-			FakeInodeZero: 0,
-			Rec_len:  uint16(12),
-			FakeName_len: 0,
-			FakeFileType:    0xDE,
-			Checksum:     checksummer.Get(),
-		}
-		struc.Pack(f, &dirSum)
-	}
+	NewDirectory(inode).AddEntry(&DirectoryEntry2{
+		Inode:    uint32(newFile.inode.num),
+		Flags:    0,
+		Name:     name,
+	})
 
 	newFile.inode.Links_count++
 	newFile.inode.UpdateCsumAndWriteback()
