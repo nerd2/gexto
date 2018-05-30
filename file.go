@@ -89,7 +89,6 @@ func (f *File) Write(p []byte) (n int, err error) {
 		//log.Println("seek", blockPtr * f.fs.sb.GetBlockSize() + blockPos, "write", writable)
 		f.fs.dev.Seek(blockPtr * f.fs.sb.GetBlockSize() + blockPos, 0)
 		f.fs.dev.Write(p[:writable])
-		f.fs.dev.Sync()
 		p = p[writable:]
 	}
 

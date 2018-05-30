@@ -72,25 +72,47 @@ func (bgd *GroupDescriptor) UpdateCsumAndWriteback() {
 }
 
 func(bgd *GroupDescriptor) GetFreeInode() *Inode {
-	// Find free inode in bitmap
 	start := bgd.GetInodeBitmapLoc() * bgd.fs.sb.GetBlockSize()
 	bgd.fs.dev.Seek(start, 0)
+
 	subInodeNum := int64(-1)
-	for i := 0; i < int(bgd.fs.sb.InodePer_group/8); i++ {
-		b := make([]byte, 1)
-		bgd.fs.dev.Read(b)
-		if b[0] != 0xFF {
-			bitNum := bits.TrailingZeros8(^b[0])
-			subInodeNum = int64(i) * 8 + int64(bitNum)
-			b[0] |= 1 << uint(bitNum)
-			bgd.fs.dev.Seek(-1, 1)
-			bgd.fs.dev.Write(b)
-			break
+
+	if bgd.Flags & BG_INODE_UNINIT != 0 {
+		b := make([]byte, bgd.fs.sb.InodePer_group/8)
+		b[0] = 1
+		bgd.fs.dev.Write(b)
+
+		bgd.Flags &= 0xFFFF ^ BG_INODE_UNINIT
+		bgd.UpdateCsumAndWriteback()
+
+		subInodeNum = 0
+	} else {
+		// Find free inode in bitmap
+		for i := 0; i < int(bgd.fs.sb.InodePer_group/8); i++ {
+			b := make([]byte, 1)
+			bgd.fs.dev.Read(b)
+			if b[0] != 0xFF {
+				//log.Println("free at ", bgd.num, start, i)
+				bitNum := bits.TrailingZeros8(^b[0])
+				subInodeNum = int64(i)*8 + int64(bitNum)
+				b[0] |= 1 << uint(bitNum)
+				bgd.fs.dev.Seek(-1, 1)
+				bgd.fs.dev.Write(b)
+				break
+			}
 		}
 	}
 
 	if subInodeNum < 0 {
+		//log.Println("!!!! bgd full !!!", bgd.num, bgd.Free_inodes_count_lo)
 		return nil
+	}
+
+	if bgd.Flags & BG_INODE_ZEROED == 0 {
+		bgd.fs.dev.Seek(bgd.GetInodeTableLoc() * bgd.fs.sb.GetBlockSize(), 0)
+		bgd.fs.dev.Write(make([]byte, int64(bgd.fs.sb.InodePer_group) / int64(bgd.fs.sb.Inode_size)))
+		bgd.Flags |= BG_INODE_ZEROED
+		bgd.UpdateCsumAndWriteback()
 	}
 
 	// Update inode bitmap checksum
@@ -125,26 +147,67 @@ func(bgd *GroupDescriptor) GetFreeInode() *Inode {
 	return inode
 }
 
-func(bgd *GroupDescriptor) GetFreeBlocks(n int64) (int64, int64) {
+func (bgd *GroupDescriptor) setBitRange(offset int64, start int64, n int64) {
+	if start < 0 || start > int64(bgd.fs.sb.BlockPer_group) {
+		return
+	}
+
+	n = (n + bgd.fs.sb.GetBlockSize() - 1) / bgd.fs.sb.GetBlockSize()
+	for i := start; i < start + n; i++ {
+		b := make([]byte, 1)
+		bgd.fs.dev.Seek(offset + i / 8, 0)
+		bgd.fs.dev.Read(b)
+		b[0] |= 1 << uint(i % 8)
+		bgd.fs.dev.Seek(-1, 1)
+		bgd.fs.dev.Write(b)
+	}
+	bgd.Free_blocks_count_lo-=uint16(n)
+}
+
+func (bgd *GroupDescriptor) GetFreeBlocks(n int64) (int64, int64) {
 	// Find free block in bitmap
 	start := bgd.GetBlockBitmapLoc() * bgd.fs.sb.GetBlockSize()
-	bgd.fs.dev.Seek(start, 0)
+
+	if bgd.Flags & BG_BLOCK_UNINIT != 0 {
+		bgd.fs.dev.Seek(start, 0)
+		bgd.fs.dev.Write(make([]byte, bgd.fs.sb.BlockPer_group/8))
+		bgd.Free_blocks_count_lo = uint16(bgd.fs.sb.BlockPer_group)
+
+		if !bgd.fs.sb.FeatureRoCompatSparse_super() || bgd.num <= 1 || bgd.num % 3 == 0 || bgd.num % 5 == 0 || bgd.num % 7 == 0 {
+			bgd.setBitRange(start, 0, bgd.fs.sb.GetBlockSize()+(bgd.fs.sb.numBlockGroups*32)+int64(bgd.fs.sb.Reserved_gdt_blocks)*bgd.fs.sb.GetBlockSize())
+		}
+		bgd.setBitRange(start, bgd.GetInodeBitmapLoc() - bgd.num * int64(bgd.fs.sb.BlockPer_group) * bgd.fs.sb.GetBlockSize(), int64(bgd.fs.sb.InodePer_group)/8)
+		bgd.setBitRange(start, bgd.GetBlockBitmapLoc() - bgd.num * int64(bgd.fs.sb.BlockPer_group) * bgd.fs.sb.GetBlockSize(), int64(bgd.fs.sb.BlockPer_group)/8)
+		bgd.setBitRange(start, bgd.GetInodeTableLoc() - bgd.num * int64(bgd.fs.sb.BlockPer_group) * bgd.fs.sb.GetBlockSize(), int64(bgd.fs.sb.Inode_size)*int64(bgd.fs.sb.InodePer_group)/8)
+		bgd.UpdateCsumAndWriteback()
+
+		blocksFree := int64(0)
+		for i := int64(0); i < bgd.fs.sb.numBlockGroups; i++ {
+			blocksFree += int64(bgd.fs.getBlockGroupDescriptor(i).Free_blocks_count_lo)
+		}
+
+		bgd.fs.sb.Free_blockCount_lo = uint32(blocksFree)
+		bgd.fs.sb.UpdateCsumAndWriteback()
+
+		bgd.Flags &= 0xFFFF ^ BG_BLOCK_UNINIT
+		bgd.UpdateCsumAndWriteback()
+	}
+
 	subBlockNum := int64(-1)
+	bgd.fs.dev.Seek(start, 0)
 	for i := 0; i < int(bgd.fs.sb.BlockPer_group/8); i++ {
 		b := make([]byte, 1)
 		bgd.fs.dev.Read(b)
 		if b[0] != 0xFF {
 			bitNum := bits.TrailingZeros8(^b[0])
-			numFree := bits.TrailingZeros8(uint8((uint16(b[0])|0x100) >> uint(bitNum)))
+			numFree := bits.TrailingZeros8(uint8((uint16(b[0]) | 0x100) >> uint(bitNum)))
 			//log.Println(bgd.num, i, b[0], bitNum, numFree, n)
 			if n > int64(numFree) {
 				n = int64(numFree)
 			}
-			subBlockNum = int64(i) * 8 + int64(bitNum)
-			for j := 0; j < int(n); j++ {
-				b[0] |= 1 << uint(bitNum + j)
-			}
-			//log.Println(b[0], n)
+			subBlockNum = int64(i)*8 + int64(bitNum)
+			b[0] |= (1 << uint(bitNum+int(n))) - 1
+			//log.Println("Found free blocks. GD", bgd.num, subBlockNum, bitNum, b[0], n)
 			bgd.fs.dev.Seek(-1, 1)
 			bgd.fs.dev.Write(b)
 			break

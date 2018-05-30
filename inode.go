@@ -125,7 +125,7 @@ func (inode *Inode) ReadDirectory() []DirectoryEntry2 {
 		} else if err != nil {
 			log.Fatalf(err.Error())
 		}
-		log.Printf("dirEntry %s: %+v", string(dirEntry.Name), dirEntry)
+		//log.Printf("dirEntry %s: %+v", string(dirEntry.Name), dirEntry)
 		f.Seek(int64(dirEntry.Rec_len) + start, 0)
 		if dirEntry.Rec_len < 9 {
 			log.Fatalf("corrupt direntry")
@@ -139,8 +139,6 @@ func (inode *Inode) AddBlocks(n int64) (blockNum int64, contiguousBlocks int64) 
 	if !inode.UsesExtents() {
 		log.Fatalf("Not implemented")
 	}
-
-	log.Println("AddBlocks", n)
 
 	r := inode.fs.dev
 	r.Seek(inode.address + 40, 0)
@@ -180,6 +178,8 @@ func (inode *Inode) AddBlocks(n int64) (blockNum int64, contiguousBlocks int64) 
 				inode.Blocks_lo += uint32(numBlocks*inode.fs.sb.GetBlockSize()/512)
 				inode.UpdateCsumAndWriteback()
 
+				//log.Println("AddBlocks", n, numBlocks)
+
 				return blockNum, numBlocks
 			} else {
 				log.Fatalf("Unable to extend no room")
@@ -201,6 +201,7 @@ func (inode *Inode) AddBlocks(n int64) (blockNum int64, contiguousBlocks int64) 
 		}
 	}
 
+	//log.Println("AddBlocks", n, 0)
 	return 0,0
 }
 

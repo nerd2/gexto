@@ -36,7 +36,7 @@ func (dir *directory) AddEntry(entry *DirectoryEntry2) error {
 	}
 	dir.f.Seek(pos - dir.sb.GetBlockSize(), 0)
 
-	log.Println("AddEntry", pos)
+	//log.Println("AddEntry", pos)
 
 	checksummer := NewChecksummer(dir.sb)
 	checksummer.Write(dir.f.inode.fs.sb.Uuid[:])
@@ -46,9 +46,9 @@ func (dir *directory) AddEntry(entry *DirectoryEntry2) error {
 	totalLen := int64(0)
 	modified := false
 	for totalLen < dir.sb.GetBlockSize() {
-		log.Println("AddEntry loop ", totalLen)
+		//log.Println("AddEntry loop ", totalLen)
 		if totalLen == dir.sb.GetBlockSize() - 12 {
-			log.Println("AddEntry found checksum", modified)
+			//log.Println("AddEntry found checksum", modified)
 			if modified {
 				dirSum := DirectoryEntryCsum{
 					FakeInodeZero: 0,
@@ -68,7 +68,7 @@ func (dir *directory) AddEntry(entry *DirectoryEntry2) error {
 			return err
 		}
 
-		log.Println("AddEntry found entry", dirEntry.Rec_len, dirEntry.Name)
+		//log.Println("AddEntry found entry", dirEntry.Rec_len, dirEntry.Name)
 
 		if dirEntry.Rec_len == 0 {
 			log.Fatalf("Invalid")
@@ -76,7 +76,7 @@ func (dir *directory) AddEntry(entry *DirectoryEntry2) error {
 
 		deSize, _ := struc.Sizeof(dirEntry)
 		if !modified && int64(dirEntry.Rec_len) >= int64(deSize) + int64(entrySize) {
-			log.Println("Found a hole", dirEntry.Rec_len, deSize, entrySize)
+			//log.Println("Found a hole", dirEntry.Rec_len, deSize, entrySize)
 			dir.f.Seek(pos - dir.sb.GetBlockSize() + int64(totalLen), 0)
 			newDeSize := (deSize + 3) & ^3
 			entry.Rec_len = dirEntry.Rec_len - uint16(newDeSize)

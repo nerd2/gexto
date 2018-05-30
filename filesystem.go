@@ -42,7 +42,7 @@ func (fs *fs) Open(name string) (*File, error) {
 	}
 
 	inode = fs.getInode(inodeNum)
-	log.Printf("Inode %d with mode %x", inode.num, inode.Mode)
+	//log.Printf("Inode %d with mode %x", inode.num, inode.Mode)
 	return &File{extFile{
 		fs: fs,
 		inode: inode,
@@ -188,7 +188,7 @@ func (fs *fs) Mkdir(path string, perm os.FileMode) error {
 	inode.Links_count++
 	inode.UpdateCsumAndWriteback()
 
-	bgd := fs.getBlockGroupDescriptor(newFile.inode.num / int64(inode.fs.sb.InodePer_group))
+	bgd := fs.getBlockGroupDescriptor((newFile.inode.num-1) / int64(inode.fs.sb.InodePer_group))
 	bgd.Used_dirs_count_lo++
 	bgd.UpdateCsumAndWriteback()
 
@@ -255,6 +255,7 @@ func (fs *fs) CreateNewFile(perm os.FileMode) *File {
 	}
 
 	if inode == nil {
+		log.Fatalln("Couldn't get free inode", fs.sb.numBlockGroups, fs.sb.Free_inodeCount)
 		return nil
 	}
 
@@ -272,7 +273,7 @@ func (fs *fs) GetFreeBlocks(n int) (int64, int64) {
 		bgd := fs.getBlockGroupDescriptor(i)
 		blockNum, numBlocks := bgd.GetFreeBlocks(int64(n))
 		if blockNum > 0 {
-			return blockNum, numBlocks
+			return blockNum + i * int64(fs.sb.BlockPer_group), numBlocks
 		}
 	}
 	log.Fatalf("Failed to find free block")
