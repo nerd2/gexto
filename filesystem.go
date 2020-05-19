@@ -7,11 +7,20 @@ import (
 	"log"
 	"fmt"
 	"io"
+	"path/filepath"
 )
 
 type fs struct {
 	sb *Superblock
 	dev *os.File
+}
+
+func (fs *fs) List() []string {
+	inodeNum := int64(ROOT_INO)
+	inode := fs.getInode(inodeNum)
+	files := fs.walk("/", inode, []string{})
+
+	return files
 }
 
 func (fs *fs) Open(name string) (*File, error) {
@@ -278,4 +287,28 @@ func (fs *fs) GetFreeBlocks(n int) (int64, int64) {
 	}
 	log.Fatalf("Failed to find free block")
 	return 0, 0
+}
+
+func (fs *fs) walk(path string, inode *Inode, files []string) []string {
+	dirContents := inode.ReadDirectory()
+
+	for _, content := range dirContents {
+		if content.Name == "." || content.Name == ".." {
+			continue
+		}
+
+		i := fs.getInode(int64(content.Inode))
+
+		if (i.Mode & uint16(0x4000)) == 0 {
+			files = append(files, filepath.Join(path, content.Name))
+			continue
+		}
+
+		if i.UsesDirectoryHashTree() {
+			continue
+		}
+		files = fs.walk(filepath.Join(path, content.Name), i, files)
+	}
+
+	return files
 }
